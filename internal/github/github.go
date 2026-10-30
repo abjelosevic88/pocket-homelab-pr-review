@@ -182,6 +182,25 @@ func (c *Client) Me(ctx context.Context) (*User, error) {
 	return &u, err
 }
 
+// ---- repositories ----
+
+// Repo is a repository the token reaches.
+type Repo struct {
+	FullName string `json:"full_name"`
+	Private  bool   `json:"private"`
+	Archived bool   `json:"archived"`
+	PushedAt string `json:"pushed_at"`
+	Owner    struct {
+		Login string `json:"login"`
+		Type  string `json:"type"` // User | Organization
+	} `json:"owner"`
+}
+
+// Repos lists the repositories the person can see, the most recently pushed first (up to 300).
+func (c *Client) Repos(ctx context.Context) ([]Repo, error) {
+	return pages[Repo](ctx, c, "/user/repos?per_page=100&sort=pushed&affiliation=owner,collaborator,organization_member", 3)
+}
+
 // ---- finding pull requests ----
 
 // SearchItem is a pull request as the search finds it.

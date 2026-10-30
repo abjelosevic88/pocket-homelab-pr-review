@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -132,6 +133,18 @@ func (s *Server) handleAddPull(w http.ResponseWriter, r *http.Request) {
 	var p *store.Pull
 	if s.cfg.DemoData && old != nil {
 		p = old
+	} else if s.cfg.DemoData {
+		// the demo has no GitHub: a pull request from its own picker list
+		for _, d := range demoPicks("all", repo, "") {
+			if d.Number == number {
+				p = &store.Pull{UserID: uid, Repo: repo, Number: number, Title: d.Title, URL: d.URL, Author: d.Author, State: "open",
+					BaseRef: "main", HeadRef: fmt.Sprintf("pr-%d", number), HeadSHA: fmt.Sprintf("demo%d", number), GHUpdatedAt: d.UpdatedAt}
+			}
+		}
+		if p == nil {
+			writeErr(w, http.StatusBadRequest, "the demo has no GitHub to ask; pick one from the list")
+			return
+		}
 	} else {
 		gh, err := s.ghFor(st)
 		if err != nil {
@@ -156,7 +169,7 @@ func (s *Server) handleAddPull(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	created := old == nil
-	if in.Walk == nil || *in.Walk {
+	if (in.Walk == nil || *in.Walk) && (!s.cfg.DemoData || s.demoInput(p) != nil) {
 		if last, err := s.store.LatestWalk(ctx, uid, p.ID); err != nil || last.HeadSHA != p.HeadSHA || last.Status == store.WalkFailed {
 			if _, err := s.queueWalk(ctx, uid, p); err != nil {
 				s.fail(w, err, "walkthrough")

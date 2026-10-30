@@ -23,9 +23,10 @@ import (
 // fakeGitHub answers the API calls PR Review makes, for one pull request.
 type fakeGitHub struct {
 	*httptest.Server
-	mu      sync.Mutex
-	reviews []map[string]any
-	head    string
+	mu       sync.Mutex
+	reviews  []map[string]any
+	head     string
+	searches []string
 }
 
 func newFakeGitHub(t *testing.T) *fakeGitHub {
@@ -38,7 +39,15 @@ func newFakeGitHub(t *testing.T) *fakeGitHub {
 	mux.HandleFunc("GET /user", func(w http.ResponseWriter, r *http.Request) {
 		js(w, map[string]any{"login": "alice"})
 	})
+	mux.HandleFunc("GET /user/repos", func(w http.ResponseWriter, r *http.Request) {
+		js(w, []any{map[string]any{"full_name": "acme/shop", "private": true, "owner": map[string]any{"login": "acme", "type": "Organization"}},
+			map[string]any{"full_name": "alice/notes", "owner": map[string]any{"login": "alice", "type": "User"}},
+			map[string]any{"full_name": "acme/old", "archived": true, "owner": map[string]any{"login": "acme", "type": "Organization"}}})
+	})
 	mux.HandleFunc("GET /search/issues", func(w http.ResponseWriter, r *http.Request) {
+		g.mu.Lock()
+		g.searches = append(g.searches, r.URL.Query().Get("q"))
+		g.mu.Unlock()
 		items := []any{}
 		if strings.Contains(r.URL.Query().Get("q"), "review-requested:@me") {
 			items = append(items, map[string]any{"number": 7, "title": "Coupons", "html_url": "https://github.com/acme/shop/pull/7", "state": "open",
@@ -396,5 +405,45 @@ func TestMatchEdits(t *testing.T) {
 	got := matchEdits([]pocket.AgentEdit{{Path: "/work/shop/db/7.sql"}, {Path: "src/App.tsx"}, {Path: "notes.txt"}}, files)
 	if len(got) != 2 || got[0].Path != "db/7.sql" || got[1].Path != "web/src/App.tsx" {
 		t.Fatalf("%+v", got)
+	}
+}
+
+func TestPickFromGitHub(t *testing.T) {
+	tt, gh := newTester(t)
+	const alice = "alice@example.com"
+	tt.do(alice, "PUT", "/settings", map[string]any{"github_token": "ghp_test", "auto_walk": "off", "sync_requested": false, "sync_authored": false, "sync_reviewed": false}, nil)
+	var repos struct {
+		Repos []repoOut `json:"repos"`
+	}
+	tt.do(alice, "GET", "/github/repos", nil, &repos)
+	if len(repos.Repos) != 2 || repos.Repos[0].Name != "acme/shop" || !repos.Repos[0].Org {
+		t.Fatalf("repos: %+v", repos.Repos)
+	}
+	var pulls struct {
+		Pulls []pickOut `json:"pulls"`
+		Error string    `json:"error"`
+	}
+	// everything = the owners of the person's repositories, never all of GitHub
+	tt.do(alice, "GET", "/github/pulls?scope=all&q=coupons", nil, &pulls)
+	gh.mu.Lock()
+	last := gh.searches[len(gh.searches)-1]
+	gh.mu.Unlock()
+	if !strings.Contains(last, "org:acme") || !strings.Contains(last, "user:alice") || !strings.Contains(last, "coupons") || !strings.Contains(last, "is:open") {
+		t.Fatalf("query: %q", last)
+	}
+	tt.do(alice, "GET", "/github/pulls?scope=review&repo=acme/shop", nil, &pulls)
+	if len(pulls.Pulls) != 1 || pulls.Pulls[0].Repo != "acme/shop" || pulls.Pulls[0].Number != 7 || pulls.Pulls[0].Added != 0 {
+		t.Fatalf("pulls: %+v %s", pulls.Pulls, pulls.Error)
+	}
+	var added struct {
+		Pull store.Pull `json:"pull"`
+	}
+	tt.do(alice, "POST", "/pulls", map[string]any{"url": pulls.Pulls[0].URL, "walk": false}, &added)
+	tt.do(alice, "GET", "/github/pulls?scope=review&repo=acme/shop", nil, &pulls)
+	if pulls.Pulls[0].Added != added.Pull.ID || added.Pull.ID == 0 {
+		t.Fatalf("not marked as added: %+v", pulls.Pulls)
+	}
+	if code := tt.do(alice, "GET", "/github/pulls?repo=not%20a%20repo", nil, nil); code != 400 {
+		t.Fatalf("bad repo: %d", code)
 	}
 }

@@ -59,6 +59,8 @@ func (s *Server) Router() http.Handler {
 			r.Get("/lookup", s.handleLookup)
 			r.Post("/sync", s.handleSyncNow)
 			r.Get("/reviews", s.handleReviews)
+			r.Get("/github/repos", s.handleGitHubRepos)
+			r.Get("/github/pulls", s.handleGitHubPulls)
 
 			// one pull request
 			r.Get("/pulls/{id}", s.handleGetPull)
