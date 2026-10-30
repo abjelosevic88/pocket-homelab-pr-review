@@ -1,0 +1,21 @@
+{
+  "name": "Pocket PR Review",
+  "short_name": "PR Review",
+  "description": "Review pull requests as a story: the changes in the order to read them, one sentence per file.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#1a7f37",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ],
+  "shortcuts": [
+    { "name": "Waiting for you", "url": "/" },
+    { "name": "Add a pull request", "url": "/?add=" },
+    { "name": "Reviews you sent", "url": "/reviews" }
+  ]
+}

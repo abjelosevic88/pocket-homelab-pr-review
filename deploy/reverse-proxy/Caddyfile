@@ -1,0 +1,7 @@
+# Pocket PR Review behind Caddy. Homepage widgets and linked apps send their own
+# bearer token to /api/*.
+pr.example.com {
+	reverse_proxy pocket-pr-review:8080 {
+		flush_interval -1
+	}
+}
