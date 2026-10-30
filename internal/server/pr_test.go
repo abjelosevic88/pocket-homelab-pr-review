@@ -15,7 +15,9 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/abjelosevic88/pocket-homelab-pr-review/internal/pocket"
 	"github.com/abjelosevic88/pocket-homelab-pr-review/internal/store"
+	"github.com/abjelosevic88/pocket-homelab-pr-review/internal/walk"
 )
 
 // fakeGitHub answers the API calls PR Review makes, for one pull request.
@@ -386,5 +388,13 @@ func TestDemoSeeds(t *testing.T) {
 		if !bytes.Contains(b, []byte(want)) {
 			t.Fatalf("demo walkthrough lacks %q:\n%s", want, b)
 		}
+	}
+}
+
+func TestMatchEdits(t *testing.T) {
+	files := []walk.File{{Path: "db/7.sql"}, {Path: "web/src/App.tsx"}}
+	got := matchEdits([]pocket.AgentEdit{{Path: "/work/shop/db/7.sql"}, {Path: "src/App.tsx"}, {Path: "notes.txt"}}, files)
+	if len(got) != 2 || got[0].Path != "db/7.sql" || got[1].Path != "web/src/App.tsx" {
+		t.Fatalf("%+v", got)
 	}
 }

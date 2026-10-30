@@ -215,7 +215,7 @@ func (s *Server) walkInput(ctx context.Context, uid int64, st store.Settings, p 
 			in.Commits = append(in.Commits, cm)
 		}
 	}
-	if edits := s.agentEdits(ctx, uid, st, p); len(edits) > 0 {
+	if edits := matchEdits(s.agentEdits(ctx, uid, st, p), in.Files); len(edits) > 0 {
 		events = append(events, editEvents(edits)...)
 		seen := map[string]bool{}
 		for _, e := range edits {
@@ -240,12 +240,30 @@ func (s *Server) agentEdits(ctx context.Context, uid int64, st store.Settings, p
 	}
 	c, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	edits, err := sib.client.Edits(c, p.URL)
+	edits, err := sib.client.Edits(c, p.URL, p.HeadRef)
 	if err != nil {
 		s.log.Debug("pocket ai: edits", "err", err)
 		return nil
 	}
 	return edits
+}
+
+// matchEdits keeps the edits of files this pull request changes, with the
+// pull request's own path (the agent may have worked in a sub-folder or with
+// absolute paths); files it edited and then put back are left out.
+func matchEdits(edits []pocket.AgentEdit, files []walk.File) []pocket.AgentEdit {
+	var out []pocket.AgentEdit
+	for _, e := range edits {
+		ep := strings.TrimPrefix(e.Path, "./")
+		for _, f := range files {
+			if ep == f.Path || strings.HasSuffix(ep, "/"+f.Path) || strings.HasSuffix(f.Path, "/"+ep) {
+				e.Path = f.Path
+				out = append(out, e)
+				break
+			}
+		}
+	}
+	return out
 }
 
 // editEvents groups an agent's edits: one event per thing it said before

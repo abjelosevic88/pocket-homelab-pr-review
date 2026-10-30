@@ -231,11 +231,15 @@ type AgentEdit struct {
 // Edits are the file edits of the person's conversations that made a pull
 // request (Pocket AI ≥ the version that offers threads:read). Older Pocket
 // AI versions answer 404, which is not an error here.
-func (c *Client) Edits(ctx context.Context, prURL string) ([]AgentEdit, error) {
+func (c *Client) Edits(ctx context.Context, prURL, branch string) ([]AgentEdit, error) {
 	var out struct {
 		Edits []AgentEdit `json:"edits"`
 	}
-	err := c.do(ctx, http.MethodGet, "/api/v1/link/edits", url.Values{"pr": {prURL}}, nil, &out)
+	q := url.Values{"pr": {prURL}}
+	if branch != "" {
+		q.Set("branch", branch)
+	}
+	err := c.do(ctx, http.MethodGet, "/api/v1/link/edits", q, nil, &out)
 	if errors.Is(err, ErrNotFound) {
 		return nil, nil
 	}
