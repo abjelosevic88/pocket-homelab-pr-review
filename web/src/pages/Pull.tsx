@@ -1,6 +1,6 @@
 // One pull request, read as a story: the walkthrough's steps in reading
 // order, how it was built (commits and an agent's edits), or every file.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
@@ -46,6 +46,16 @@ export default function Pull() {
   const { settings } = useApp()
   const { toast } = useToast()
   const mobile = useIsMobile()
+  // the tabs stick to the top; a file's header sticks right under them
+  const [tabsH, setTabsH] = useState(0)
+  const tabsRO = useRef<ResizeObserver | null>(null)
+  const tabsRef = useCallback((el: HTMLDivElement | null) => {
+    tabsRO.current?.disconnect()
+    tabsRO.current = null
+    if (!el) return
+    tabsRO.current = new ResizeObserver(() => setTabsH(el.offsetHeight))
+    tabsRO.current.observe(el)
+  }, [])
   const [page, setPage] = useState<PullPage | null>(null)
   const [err, setErr] = useState('')
   const [threads, setThreads] = useState<Thread[]>([])
@@ -158,7 +168,7 @@ export default function Pull() {
   ]
 
   return (
-    <div className="pr-page">
+    <div className="pr-page" style={{ '--tabs-h': `${tabsH}px` } as React.CSSProperties}>
       <header className="pr-head">
         <div className="pr-head-main">
           <h2 className="pr-h-title">{p.title} <a className="muted pr-h-num" href={p.url} target="_blank" rel="noreferrer">#{p.number}</a></h2>
@@ -184,7 +194,7 @@ export default function Pull() {
 
       {w && w.status === 'ready' && doc && (
         <>
-          <div className="pr-tabs">
+          <div className="pr-tabs" ref={tabsRef}>
             <Segmented value={view} onChange={setView} options={[
               { value: 'steps', label: mobile ? 'Steps' : 'Walkthrough' },
               { value: 'built', label: mobile ? 'Built' : 'As it was built' },

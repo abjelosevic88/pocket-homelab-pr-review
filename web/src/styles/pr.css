@@ -232,8 +232,10 @@
 .step-head h3 { font-size: 19px; letter-spacing: -.01em; }
 .step-why { margin: 0; line-height: 1.55; color: var(--text-2); }
 .step-foot { display: flex; align-items: center; gap: 8px; padding: 6px 0 20px; }
-.unit { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-.unit-head { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; }
+.unit { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: clip; min-width: 0; max-width: 100%; }
+.unit > .diff { max-width: 100%; }
+/* a file's header stays in view under the tabs while its diff scrolls */
+.unit-head { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; position: sticky; top: var(--tabs-h, 0px); z-index: 4; background: var(--surface); border-radius: 12px 12px 0 0; box-shadow: 0 1px 0 var(--border); }
 .unit.done .unit-head { background: var(--surface-2); }
 .unit-toggle { background: none; border: 0; padding: 2px; color: var(--muted); cursor: pointer; display: grid; margin-top: 1px; }
 .unit-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -430,3 +432,5 @@
 /* a whole new file in solid green is hard to read: lighter, as GitHub does */
 :root { --add-bg: #f0fbf2; --add-num: #d8f5de; }
 [data-theme="dark"] { --add-bg: rgba(46, 160, 67, .10); --add-num: rgba(46, 160, 67, .22); }
+/* on a phone the header with its sentence would cover a third of the screen */
+@media (max-width: 767px) { .unit-head { position: static; } }
