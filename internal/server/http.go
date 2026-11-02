@@ -89,6 +89,7 @@ func (s *Server) Router() http.Handler {
 
 			// a coding agent (Pocket AI)
 			r.Get("/agent/options", s.handleAgentOptions)
+			r.Get("/ai/active", s.handleAIActive)
 			r.Get("/agent/dirs", s.handleAgentDirs)
 			r.Get("/pulls/{id}/agent", s.handleAgentThreads)
 			r.Get("/pulls/{id}/agent/prompt", s.handleAgentPrompt)

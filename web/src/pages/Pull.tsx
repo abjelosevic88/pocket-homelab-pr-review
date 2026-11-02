@@ -15,7 +15,8 @@ import { AgentModal } from '../components/AgentModal'
 import { Select } from '../components/Select'
 import { DataFlow } from '../components/DataFlow'
 import { PullStatus } from '../components/PullStatus'
-import { AIDock, useAIDock } from '../components/AIDock'
+import { AIDock, Conversations, useAIDock } from '../components/AIDock'
+import { AIMark } from '../components/AIMark'
 import { Empty, Loading, MenuButton, type MenuItem, Modal, Segmented, Spinner, copyText, errMsg, modalOpen, useIsMobile, useToast } from '../components/ui'
 import { WalkPill, reviewBadge } from './Inbox'
 
@@ -221,7 +222,7 @@ export default function Pull() {
         </div>
         <div className="pr-head-actions">
           <button type="button" className={`btn ${dock.open ? 'active' : ''}`} onClick={dock.toggle} disabled={dock.busy} title="Ask Pocket AI about this pull request (i)" aria-pressed={dock.open}>
-            {dock.busy ? <Spinner size={14} /> : <Icon name="sparkles" size={15} />}{!mobile && 'Pocket AI'}</button>
+            {dock.busy ? <Spinner size={14} /> : <Icon name="sparkles" size={15} />}{!mobile && 'Pocket AI'}<AIMark refName={`${p.repo}#${p.number}`} /></button>
           <button type="button" className="btn primary" onClick={() => setModal('review')} title="Finish the review (c)"><Icon name="check" size={15} />{mobile ? 'Review' : 'Finish the review'}{drafts.length > 0 && <span className="badge">{drafts.length}</span>}</button>
           <MenuButton items={more} label="More" align="right" width={300}><Icon name="more" size={16} /></MenuButton>
         </div>
@@ -248,8 +249,9 @@ export default function Pull() {
 
           {view === 'steps' && (
             <div className="walk">
-              {!mobile && <StepList steps={steps} doc={doc} current={stepKey} viewed={viewed} drafts={drafts} onGo={goStep} />}
+              {!mobile && <StepList steps={steps} doc={doc} current={stepKey} viewed={viewed} drafts={drafts} onGo={goStep} after={<Conversations pull={p} dock={dock} />} />}
               <div className="walk-main">
+                {mobile && stepIdx < 0 && <Conversations pull={p} dock={dock} />}
                 {mobile && <Select ariaLabel="Step" value={stepKey} onChange={goStep} options={[{ value: OVERVIEW, label: 'In one minute' }, ...steps.map((s, i) => ({ value: s.key, label: `${i + 1}. ${s.title}${stepDone(s, viewed) ? ' ✓' : ''}` }))]} />}
                 {stepIdx < 0
                   ? <Overview doc={doc} pull={page} viewed={viewed} mobile={mobile} onGo={goStep} onStart={() => steps[0] && goStep(steps[0].key)} onAsk={() => setModal('ask')} />
@@ -274,10 +276,11 @@ export default function Pull() {
   )
 }
 
-function StepList({ steps, doc, current, viewed, drafts, onGo }: { steps: Step[]; doc: Doc; current: string; viewed: Viewed; drafts: Comment[]; onGo: (k: string) => void }) {
+function StepList({ steps, doc, current, viewed, drafts, onGo, after }: { steps: Step[]; doc: Doc; current: string; viewed: Viewed; drafts: Comment[]; onGo: (k: string) => void; after?: React.ReactNode }) {
   const notesFor = (s: Step) => drafts.filter(d => (d.path && s.units.some(u => u.path === d.path)) || d.step === s.title).length
   return (
     <nav className="step-list" aria-label="Steps">
+      {after}
       <button type="button" className={`step-item ov ${current === OVERVIEW ? 'active' : ''}`} onClick={() => onGo(OVERVIEW)}>
         <span className="step-num"><Icon name="info" size={13} /></span><span className="step-t">In one minute</span>
       </button>
