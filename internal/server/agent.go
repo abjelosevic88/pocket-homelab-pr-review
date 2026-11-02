@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/abjelosevic88/pocket-homelab-pr-review/internal/pocket"
 	"github.com/abjelosevic88/pocket-homelab-pr-review/internal/store"
+	"github.com/abjelosevic88/pocket-homelab-pr-review/internal/walk"
 )
 
 // ---- handing the review to a coding agent (Pocket AI) ----
@@ -205,4 +207,84 @@ func (s *Server) handleAgentThreads(w http.ResponseWriter, r *http.Request) {
 		list = []pocket.AgentThread{}
 	}
 	writeJSON(w, http.StatusOK, list)
+}
+
+// ---- Pocket AI beside the pull request ----
+//
+// The panel on the right of a pull request is a Pocket AI conversation about
+// it, as in Pocket Projects: the repository's folder when one is remembered
+// (else the home folder), the pull request in the hidden context, and Pocket
+// PR Review's tools (find, brief, diff, grep, status) to read it.
+
+func (s *Server) handleChatStart(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	uid := actorID(ctx)
+	p, err := s.store.GetPull(ctx, uid, idParam(r, "id"))
+	if err != nil {
+		s.fail(w, err, "pull request")
+		return
+	}
+	var in struct {
+		Text string `json:"text"`
+	}
+	_ = decode(r, &in)
+	sib, err := s.clients(ctx, uid).conn(ctx, appAI, scopeThreadsWrite)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	st, _ := s.store.GetSettings(ctx, uid)
+	f, known := repoFolders(st)[p.Repo]
+	if !known || f.Cwd == "" {
+		f = repoFolder{Cwd: "~"}
+	}
+	text := strings.TrimSpace(in.Text)
+	send := text != ""
+	if text == "" {
+		text = fmt.Sprintf("Let's talk about pull request %s “%s”.", p.Ref(), p.Title)
+	}
+	d := pocket.Draft{HostID: f.Host, Cwd: f.Cwd, Title: p.Ref() + " · " + oneLine(p.Title, 70), Text: text,
+		Source: "pr-review", Ref: p.Ref(), RefURL: p.URL, RefLabel: p.Ref() + " " + oneLine(p.Title, 100), System: s.chatContext(ctx, p, known)}
+	_, openURL, err := sib.client.CreateDraft(ctx, d)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, "Pocket AI: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"url": openURL, "send": send, "folder": known})
+}
+
+// chatContext is the hidden context of a conversation about the pull request.
+func (s *Server) chatContext(ctx context.Context, p *store.Pull, inRepo bool) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "The person is reviewing pull request %s “%s” in Pocket PR Review (%s) and asks about it here.\n", p.Ref(), p.Title, s.pullURL(p))
+	fmt.Fprintf(&b, "GitHub: %s — by %s, branch `%s` into `%s`, head commit %s, +%d −%d in %d files, %d commits.\n", p.URL, p.Author, p.HeadRef, p.BaseRef, short(p.HeadSHA), p.Additions, p.Deletions, p.ChangedFiles, p.Commits)
+	fmt.Fprintf(&b, "Read it with the Pocket PR Review tools (pocket_find_tools \"pr-review\", then pocket_call_tool) and id %d: pocket_pr-review_brief (description, walkthrough, every changed file with one sentence), pocket_pr-review_diff (one file's diff), pocket_pr-review_grep (search every changed line), pocket_pr-review_status (CI, merging, reviews), pocket_pr-review_conversation (GitHub threads).\n", p.ID)
+	if inRepo {
+		fmt.Fprintf(&b, "You are in the repository's folder. To read code around the change: git fetch origin %s, then git show / git diff origin/%s...origin/%s. Do not check out branches, edit files, commit or push unless the person asks.\n", p.HeadRef, p.BaseRef, p.HeadRef)
+	} else {
+		b.WriteString("You are not in the repository's folder; read the pull request through the tools above. Do not change anything unless the person asks.\n")
+	}
+	if wk, err := s.store.LatestReadyWalk(ctx, actorID(ctx), p.ID); err == nil {
+		var d walk.Doc
+		if json.Unmarshal(wk.Doc, &d) == nil {
+			if d.TLDR != "" {
+				b.WriteString("In one sentence: " + d.TLDR + "\n")
+			}
+			if len(d.Steps) > 0 {
+				b.WriteString("Its walkthrough, in reading order:\n")
+				for i, st := range d.Steps {
+					fmt.Fprintf(&b, "%d. %s (%d files)\n", i+1, st.Title, len(st.Units))
+				}
+			}
+		}
+	}
+	b.WriteString("Answer briefly and concretely, citing files and lines.")
+	return b.String()
+}
+
+func short(sha string) string {
+	if len(sha) > 7 {
+		return sha[:7]
+	}
+	return sha
 }

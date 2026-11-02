@@ -3,7 +3,7 @@ import { Modal } from './ui'
 const GROUPS: { title: string; keys: [string[], string][] }[] = [
   { title: 'Go to', keys: [[['h'], 'Waiting for you'], [['o'], 'All open'], [['m'], 'Yours'], [['s'], 'Reviews you sent'], [[','], 'Settings'], [['/'], 'Search & commands'], [['⌘', 'K'], 'Search & commands']] },
   { title: 'Lists', keys: [[['n'], 'Add a pull request'], [['r'], 'Check GitHub now']] },
-  { title: 'In a pull request', keys: [[['j'], 'Next step'], [['k'], 'Previous step'], [['v'], 'Mark the step as looked at, then next'], [[/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘' : 'Ctrl', 'click'], 'Mark the file under the pointer as looked at'], [['1'], 'Walkthrough'], [['2'], 'As it was built'], [['3'], 'All files'], [['c'], 'Finish the review'], [['a'], 'Ask about this step'], [['e'], 'Hand the comments to a coding agent']] },
+  { title: 'In a pull request', keys: [[['j'], 'Next step'], [['k'], 'Previous step'], [['v'], 'Mark the step as looked at, then next'], [[/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘' : 'Ctrl', 'click'], 'Mark the file under the pointer as looked at'], [['1'], 'Walkthrough'], [['2'], 'As it was built'], [['3'], 'All files'], [['c'], 'Finish the review'], [['a'], 'Ask about this step'], [['i'], 'Pocket AI on the right'], [['e'], 'Hand the comments to a coding agent']] },
   { title: 'Window', keys: [[['['], 'Show or hide the sidebar'], [['esc'], 'Close a dialog or menu']] },
   { title: 'Help', keys: [[['?'], 'This sheet']] },
 ]
