@@ -48,14 +48,14 @@ export function ReviewModal({ pull, drafts, canSend, demo, onClose, onSent, onRe
               <div key={c.id} className="rd-row">
                 <code className="rd-where">{c.path}:{c.start_line ? `${c.start_line}–` : ''}{c.line}</code>
                 <span className="rd-body">{c.body}</span>
-                <button type="button" className="btn ghost xs" onClick={() => onRemove(c.id)} aria-label="Remove"><Icon name="x" size={13} /></button>
+                <button type="button" className="btn ghost xs icon-only" onClick={() => onRemove(c.id)} aria-label="Remove"><Icon name="x" size={13} /></button>
               </div>
             ))}
             {notes.map(c => (
               <div key={c.id} className="rd-row">
                 <span className="rd-where badge">{c.step}</span>
                 <span className="rd-body">{c.body}</span>
-                <button type="button" className="btn ghost xs" onClick={() => onRemove(c.id)} aria-label="Remove"><Icon name="x" size={13} /></button>
+                <button type="button" className="btn ghost xs icon-only" onClick={() => onRemove(c.id)} aria-label="Remove"><Icon name="x" size={13} /></button>
               </div>
             ))}
             {notes.length > 0 && <p className="muted small">Notes on steps go into the review's text, under “By step”.</p>}
