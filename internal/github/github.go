@@ -68,6 +68,14 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("GitHub answered %d: %s", e.Status, msg)
 }
 
+type acceptKey struct{}
+
+// withHTML asks GitHub for comment bodies rendered to HTML too (body_html):
+// Markdown, <details>, images and suggestions as github.com shows them.
+func withHTML(ctx context.Context) context.Context {
+	return context.WithValue(ctx, acceptKey{}, "application/vnd.github.full+json")
+}
+
 // IsNotFound reports a 404.
 func IsNotFound(err error) bool {
 	var e *Error
@@ -95,7 +103,11 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.Token)
-	req.Header.Set("Accept", "application/vnd.github+json")
+	accept := "application/vnd.github+json"
+	if a, ok := ctx.Value(acceptKey{}).(string); ok {
+		accept = a
+	}
+	req.Header.Set("Accept", accept)
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	req.Header.Set("User-Agent", c.UA)
 	if body != nil {
@@ -388,6 +400,7 @@ type LineComment struct {
 	StartLine   *int   `json:"start_line"`
 	Side        string `json:"side"`
 	Body        string `json:"body"`
+	BodyHTML    string `json:"body_html,omitempty"` // GitHub's rendering, sanitized again in the page
 	User        User   `json:"user"`
 	HTMLURL     string `json:"html_url"`
 	CommitID    string `json:"commit_id"`
@@ -398,7 +411,7 @@ type LineComment struct {
 
 // LineComments lists a pull request's line comments.
 func (c *Client) LineComments(ctx context.Context, repo string, n int) ([]LineComment, error) {
-	return pages[LineComment](ctx, c, fmt.Sprintf("/repos/%s/pulls/%d/comments?per_page=100", repo, n), 10)
+	return pages[LineComment](withHTML(ctx), c, fmt.Sprintf("/repos/%s/pulls/%d/comments?per_page=100", repo, n), 10)
 }
 
 // NewComment is a line comment in a review being sent.
@@ -428,7 +441,7 @@ func (c *Client) CreateReview(ctx context.Context, repo string, n int, commit, e
 // Reply answers a line comment.
 func (c *Client) Reply(ctx context.Context, repo string, n int, to int64, body string) (*LineComment, error) {
 	var lc LineComment
-	_, err := c.do(ctx, http.MethodPost, fmt.Sprintf("/repos/%s/pulls/%d/comments/%d/replies", repo, n, to), map[string]string{"body": body}, &lc)
+	_, err := c.do(withHTML(ctx), http.MethodPost, fmt.Sprintf("/repos/%s/pulls/%d/comments/%d/replies", repo, n, to), map[string]string{"body": body}, &lc)
 	return &lc, err
 }
 

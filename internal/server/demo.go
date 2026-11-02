@@ -708,8 +708,17 @@ func demoThreads(p *store.Pull) []thread {
 			{ID: 501, Path: "internal/coupons/repository.go", Line: line(19), Side: "RIGHT", Body: "Nice — one UPDATE with the condition means no race on the last use.", User: github.User{Login: "dino"}, CreatedAt: at},
 			{ID: 502, InReplyTo: 501, Path: "internal/coupons/repository.go", Line: line(19), Side: "RIGHT", Body: "Thanks! That was the point of doing it in SQL.", User: github.User{Login: "sara-k"}, CreatedAt: at},
 		}},
+		{ID: 504, Path: "internal/coupons/service.go", Line: 12, Side: "RIGHT", URL: p.URL + "#discussion_r504", Comments: []github.LineComment{
+			{ID: 504, Path: "internal/coupons/service.go", Line: line(12), Side: "RIGHT", Body: demoBotComment, User: github.User{Login: "coderabbitai[bot]"}, CreatedAt: at},
+		}},
 		{ID: 503, Path: "web/src/pages/admin/Coupons.tsx", Line: 25, Side: "RIGHT", URL: p.URL + "#discussion_r503", Comments: []github.LineComment{
 			{ID: 503, Path: "web/src/pages/admin/Coupons.tsx", Line: line(25), Side: "RIGHT", Body: "Should the percentage input say “% off” next to it? On the phone it's just a number.", User: github.User{Login: "lena"}, CreatedAt: at},
 		}},
 	}
 }
+
+// demoBotComment is a review bot's comment in GitHub Markdown, with HTML in it.
+const demoBotComment = "<!-- review-bot:v1 -->\n\n**Major** · **Data integrity**\n\n" +
+	"_The use is counted before the order is paid._ `Apply` calls `Redeem` right away, so an abandoned checkout still uses up a limited coupon.\n\n" +
+	"<details>\n<summary>How this was checked</summary>\n\n```bash\nrg -n \"Redeem\\(\" internal/\n```\n\n| File | Line |\n|---|---|\n| `service.go` | 12 |\n\n</details>\n\n" +
+	"Suggested fix:\n\n```go\nif err := s.repo.Redeem(ctx, c.ID); err != nil {\n\treturn Discount{}, err\n}\n```\n\n- [ ] count the use when the order is paid\n- [x] keep the conditional UPDATE"

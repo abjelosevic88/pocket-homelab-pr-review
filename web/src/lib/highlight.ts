@@ -33,6 +33,12 @@ import type { Line } from './types'
 
 const LANGS = { bash, c, cpp, csharp, css, dockerfile, go, graphql, ini, java, javascript, json, kotlin, makefile, markdown, php, protobuf, python, ruby, rust, scss, sql, swift, typescript, xml, yaml }
 for (const [name, def] of Object.entries(LANGS)) hljs.registerLanguage(name, def)
+hljs.registerAliases(['ts', 'tsx'], { languageName: 'typescript' })
+hljs.registerAliases(['js', 'jsx'], { languageName: 'javascript' })
+hljs.registerAliases(['sh', 'shell', 'zsh'], { languageName: 'bash' })
+hljs.registerAliases(['yml'], { languageName: 'yaml' })
+hljs.registerAliases(['py'], { languageName: 'python' })
+export { hljs }
 
 const BY_EXT: Record<string, string> = {
   ts: 'typescript', tsx: 'typescript', mts: 'typescript', cts: 'typescript',

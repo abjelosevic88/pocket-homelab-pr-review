@@ -277,7 +277,7 @@
 .note-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; margin: 0 0 8px; max-width: 760px; font-family: system-ui, -apple-system, sans-serif; font-size: 13.5px; }
 .note-card.mine.draft { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
 .note-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-.note-body { white-space: pre-wrap; line-height: 1.5; overflow-wrap: anywhere; }
+.note-body { line-height: 1.5; overflow-wrap: anywhere; }
 .gh-c + .gh-c { border-top: 1px solid var(--border); padding-top: 6px; margin-top: 6px; }
 .gh-ava { width: 18px; height: 18px; border-radius: 50%; }
 .composer { display: grid; gap: 6px; max-width: 760px; font-family: system-ui, -apple-system, sans-serif; margin-bottom: 6px; }
@@ -408,29 +408,66 @@
 .df-key { width: 18px; height: 11px; border-radius: 3px; display: inline-block; border: 1.6px solid var(--accent); background: var(--surface); }
 .df-key.old { border: 1.2px dashed var(--border-strong, #b6bcc6); background: var(--surface-2); }
 /* syntax colours in diffs (GitHub's palette) */
-.dc .hljs-keyword, .dc .hljs-meta .hljs-keyword, .dc .hljs-doctag, .dc .hljs-template-tag, .dc .hljs-template-variable, .dc .hljs-type, .dc .hljs-variable.language_ { color: #cf222e; }
-.dc .hljs-title, .dc .hljs-title.class_, .dc .hljs-title.function_ { color: #8250df; }
-.dc .hljs-attr, .dc .hljs-attribute, .dc .hljs-literal, .dc .hljs-meta, .dc .hljs-number, .dc .hljs-operator, .dc .hljs-variable, .dc .hljs-selector-attr, .dc .hljs-selector-class, .dc .hljs-selector-id { color: #0550ae; }
-.dc .hljs-regexp, .dc .hljs-string, .dc .hljs-meta .hljs-string { color: #0a3069; }
-.dc .hljs-built_in, .dc .hljs-symbol { color: #953800; }
-.dc .hljs-comment, .dc .hljs-code, .dc .hljs-formula { color: #6e7781; font-style: italic; }
-.dc .hljs-name, .dc .hljs-quote, .dc .hljs-selector-tag, .dc .hljs-selector-pseudo { color: #116329; }
-.dc .hljs-subst { color: inherit; }
-.dc .hljs-section { color: #0550ae; font-weight: 600; }
-.dc .hljs-bullet { color: #953800; }
-.dc .hljs-emphasis { font-style: italic; }
-.dc .hljs-strong { font-weight: 600; }
-.dc .hljs-addition { color: #116329; } .dc .hljs-deletion { color: #82071e; }
-[data-theme="dark"] .dc .hljs-keyword, [data-theme="dark"] .dc .hljs-meta .hljs-keyword, [data-theme="dark"] .dc .hljs-doctag, [data-theme="dark"] .dc .hljs-template-tag, [data-theme="dark"] .dc .hljs-template-variable, [data-theme="dark"] .dc .hljs-type, [data-theme="dark"] .dc .hljs-variable.language_ { color: #ff7b72; }
-[data-theme="dark"] .dc .hljs-title, [data-theme="dark"] .dc .hljs-title.class_, [data-theme="dark"] .dc .hljs-title.function_ { color: #d2a8ff; }
-[data-theme="dark"] .dc .hljs-attr, [data-theme="dark"] .dc .hljs-attribute, [data-theme="dark"] .dc .hljs-literal, [data-theme="dark"] .dc .hljs-meta, [data-theme="dark"] .dc .hljs-number, [data-theme="dark"] .dc .hljs-operator, [data-theme="dark"] .dc .hljs-variable, [data-theme="dark"] .dc .hljs-selector-attr, [data-theme="dark"] .dc .hljs-selector-class, [data-theme="dark"] .dc .hljs-selector-id, [data-theme="dark"] .dc .hljs-section { color: #79c0ff; }
-[data-theme="dark"] .dc .hljs-regexp, [data-theme="dark"] .dc .hljs-string, [data-theme="dark"] .dc .hljs-meta .hljs-string { color: #a5d6ff; }
-[data-theme="dark"] .dc .hljs-built_in, [data-theme="dark"] .dc .hljs-symbol, [data-theme="dark"] .dc .hljs-bullet { color: #ffa657; }
-[data-theme="dark"] .dc .hljs-comment, [data-theme="dark"] .dc .hljs-code, [data-theme="dark"] .dc .hljs-formula { color: #8b949e; }
-[data-theme="dark"] .dc .hljs-name, [data-theme="dark"] .dc .hljs-quote, [data-theme="dark"] .dc .hljs-selector-tag, [data-theme="dark"] .dc .hljs-selector-pseudo, [data-theme="dark"] .dc .hljs-addition { color: #7ee787; }
-[data-theme="dark"] .dc .hljs-deletion { color: #ffdcd7; }
+:is(.dc, .md) .hljs-keyword, :is(.dc, .md) .hljs-meta .hljs-keyword, :is(.dc, .md) .hljs-doctag, :is(.dc, .md) .hljs-template-tag, :is(.dc, .md) .hljs-template-variable, :is(.dc, .md) .hljs-type, :is(.dc, .md) .hljs-variable.language_ { color: #cf222e; }
+:is(.dc, .md) .hljs-title, :is(.dc, .md) .hljs-title.class_, :is(.dc, .md) .hljs-title.function_ { color: #8250df; }
+:is(.dc, .md) .hljs-attr, :is(.dc, .md) .hljs-attribute, :is(.dc, .md) .hljs-literal, :is(.dc, .md) .hljs-meta, :is(.dc, .md) .hljs-number, :is(.dc, .md) .hljs-operator, :is(.dc, .md) .hljs-variable, :is(.dc, .md) .hljs-selector-attr, :is(.dc, .md) .hljs-selector-class, :is(.dc, .md) .hljs-selector-id { color: #0550ae; }
+:is(.dc, .md) .hljs-regexp, :is(.dc, .md) .hljs-string, :is(.dc, .md) .hljs-meta .hljs-string { color: #0a3069; }
+:is(.dc, .md) .hljs-built_in, :is(.dc, .md) .hljs-symbol { color: #953800; }
+:is(.dc, .md) .hljs-comment, :is(.dc, .md) .hljs-code, :is(.dc, .md) .hljs-formula { color: #6e7781; font-style: italic; }
+:is(.dc, .md) .hljs-name, :is(.dc, .md) .hljs-quote, :is(.dc, .md) .hljs-selector-tag, :is(.dc, .md) .hljs-selector-pseudo { color: #116329; }
+:is(.dc, .md) .hljs-subst { color: inherit; }
+:is(.dc, .md) .hljs-section { color: #0550ae; font-weight: 600; }
+:is(.dc, .md) .hljs-bullet { color: #953800; }
+:is(.dc, .md) .hljs-emphasis { font-style: italic; }
+:is(.dc, .md) .hljs-strong { font-weight: 600; }
+:is(.dc, .md) .hljs-addition { color: #116329; } :is(.dc, .md) .hljs-deletion { color: #82071e; }
+[data-theme="dark"] :is(.dc, .md) .hljs-keyword, [data-theme="dark"] :is(.dc, .md) .hljs-meta .hljs-keyword, [data-theme="dark"] :is(.dc, .md) .hljs-doctag, [data-theme="dark"] :is(.dc, .md) .hljs-template-tag, [data-theme="dark"] :is(.dc, .md) .hljs-template-variable, [data-theme="dark"] :is(.dc, .md) .hljs-type, [data-theme="dark"] :is(.dc, .md) .hljs-variable.language_ { color: #ff7b72; }
+[data-theme="dark"] :is(.dc, .md) .hljs-title, [data-theme="dark"] :is(.dc, .md) .hljs-title.class_, [data-theme="dark"] :is(.dc, .md) .hljs-title.function_ { color: #d2a8ff; }
+[data-theme="dark"] :is(.dc, .md) .hljs-attr, [data-theme="dark"] :is(.dc, .md) .hljs-attribute, [data-theme="dark"] :is(.dc, .md) .hljs-literal, [data-theme="dark"] :is(.dc, .md) .hljs-meta, [data-theme="dark"] :is(.dc, .md) .hljs-number, [data-theme="dark"] :is(.dc, .md) .hljs-operator, [data-theme="dark"] :is(.dc, .md) .hljs-variable, [data-theme="dark"] :is(.dc, .md) .hljs-selector-attr, [data-theme="dark"] :is(.dc, .md) .hljs-selector-class, [data-theme="dark"] :is(.dc, .md) .hljs-selector-id, [data-theme="dark"] :is(.dc, .md) .hljs-section { color: #79c0ff; }
+[data-theme="dark"] :is(.dc, .md) .hljs-regexp, [data-theme="dark"] :is(.dc, .md) .hljs-string, [data-theme="dark"] :is(.dc, .md) .hljs-meta .hljs-string { color: #a5d6ff; }
+[data-theme="dark"] :is(.dc, .md) .hljs-built_in, [data-theme="dark"] :is(.dc, .md) .hljs-symbol, [data-theme="dark"] :is(.dc, .md) .hljs-bullet { color: #ffa657; }
+[data-theme="dark"] :is(.dc, .md) .hljs-comment, [data-theme="dark"] :is(.dc, .md) .hljs-code, [data-theme="dark"] :is(.dc, .md) .hljs-formula { color: #8b949e; }
+[data-theme="dark"] :is(.dc, .md) .hljs-name, [data-theme="dark"] :is(.dc, .md) .hljs-quote, [data-theme="dark"] :is(.dc, .md) .hljs-selector-tag, [data-theme="dark"] :is(.dc, .md) .hljs-selector-pseudo, [data-theme="dark"] :is(.dc, .md) .hljs-addition { color: #7ee787; }
+[data-theme="dark"] :is(.dc, .md) .hljs-deletion { color: #ffdcd7; }
 /* a whole new file in solid green is hard to read: lighter, as GitHub does */
 :root { --add-bg: #f0fbf2; --add-num: #d8f5de; }
 [data-theme="dark"] { --add-bg: rgba(46, 160, 67, .10); --add-num: rgba(46, 160, 67, .22); }
 /* on a phone the header with its sentence would cover a third of the screen */
 @media (max-width: 767px) { .unit-head { position: static; } }
+/* comments: GitHub's Markdown, rendered */
+.md { white-space: normal; font-size: 13.5px; line-height: 1.55; color: var(--text); min-width: 0; }
+.md > :first-child { margin-top: 0; } .md > :last-child { margin-bottom: 0; }
+.md p, .md ul, .md ol, .md blockquote, .md pre, .md table, .md details { margin: 0 0 8px; }
+.md ul, .md ol { padding-left: 22px; }
+.md li + li { margin-top: 2px; }
+.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 { font-size: 14px; font-weight: 650; margin: 12px 0 6px; }
+.md h1, .md h2 { font-size: 15px; }
+.md a { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 2px; }
+.md code { font-family: var(--code); font-size: 12px; background: var(--surface-2); padding: 1px 5px; border-radius: 5px; }
+.md pre { font-family: var(--code); font-size: 12px; background: var(--surface-2); border: 1px solid var(--hairline); padding: 8px 10px; border-radius: 8px; overflow-x: auto; white-space: pre; }
+.md pre code { background: none; padding: 0; font-size: inherit; }
+.md blockquote { border-left: 3px solid var(--border-strong); padding: 0 0 0 10px; color: var(--text-2); }
+.md table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; }
+.md th, .md td { border: 1px solid var(--border); padding: 4px 8px; text-align: left; }
+.md th { background: var(--surface-2); font-weight: 600; }
+.md img { max-width: 100%; height: auto; vertical-align: middle; }
+.md hr { border: 0; border-top: 1px solid var(--border); margin: 10px 0; }
+.md details { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; background: var(--surface); }
+.md details > summary { cursor: pointer; font-weight: 600; color: var(--text-2); }
+.md details[open] > summary { margin-bottom: 6px; }
+.md details details { margin-top: 6px; }
+.md input[type="checkbox"] { margin: 0 6px 0 0; }
+/* GitHub's suggested changes */
+.md .blob-wrapper, .md .js-suggested-changes-blob { overflow-x: auto; }
+.md .blob-code-deletion { background: var(--del-bg); } .md .blob-code-addition { background: var(--add-bg); }
+.md .blob-num { display: none; }
+.md table.d-table, .md .js-suggested-changes-blob table { display: table; border: 0; }
+.md .js-suggested-changes-blob td { border: 0; font-family: var(--code); font-size: 12px; white-space: pre; padding: 0 8px; }
+/* GitHub's own colours in its rendered comments (pl-*) */
+.md .pl-k { color: #cf222e; } .md .pl-en, .md .pl-e { color: #8250df; } .md .pl-s, .md .pl-pds, .md .pl-sr { color: #0a3069; }
+.md .pl-c { color: #6e7781; font-style: italic; } .md .pl-c1, .md .pl-v, .md .pl-smi, .md .pl-ent { color: #0550ae; }
+[data-theme="dark"] .md .pl-k { color: #ff7b72; } [data-theme="dark"] .md .pl-en, [data-theme="dark"] .md .pl-e { color: #d2a8ff; }
+[data-theme="dark"] .md .pl-s, [data-theme="dark"] .md .pl-pds, [data-theme="dark"] .md .pl-sr { color: #a5d6ff; }
+[data-theme="dark"] .md .pl-c { color: #8b949e; } [data-theme="dark"] .md .pl-c1, [data-theme="dark"] .md .pl-v, [data-theme="dark"] .md .pl-smi, [data-theme="dark"] .md .pl-ent { color: #79c0ff; }
+.md .task-list-item, .md li:has(> input[type="checkbox"]) { list-style: none; margin-left: -18px; }
+.md strong, .md b { font-weight: 650; }

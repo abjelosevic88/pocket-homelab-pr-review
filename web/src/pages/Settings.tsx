@@ -169,6 +169,7 @@ function WalkTab() {
       <Section title="Reading them" icon="eye">
         <SettingRow title="A pull request opens on"><Segmented size="sm" value={f.open_view} onChange={v => setF({ ...f, open_view: v })} options={[{ value: 'steps', label: 'Walkthrough' }, { value: 'built', label: 'As it was built' }, { value: 'files', label: 'All files' }]} /></SettingRow>
         <SettingRow title="Wrap long lines" help="Instead of scrolling sideways in the diff."><Switch checked={f.diff_wrap} onChange={v => setF({ ...f, diff_wrap: v })} label="Wrap lines" /></SettingRow>
+        <SettingRow title="Test files count as looked at" help="When you open a pull request, its test files are marked as looked at by themselves — again after new commits change them. Uncheck one to read it."><Switch checked={!!f.auto_view_tests} onChange={v => setF({ ...f, auto_view_tests: v })} label="Mark test files" /></SettingRow>
       </Section>
       <Section title="Dates" icon="calendar">
         <SettingRow title="Date format"><Select ariaLabel="Date format" value={f.date_format} onChange={v => setF({ ...f, date_format: v as DateFormat })} options={DATE_FORMATS.map(d => ({ value: d.id, label: d.label }))} /></SettingRow>
