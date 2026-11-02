@@ -6,6 +6,7 @@ import { wordMarks } from '../lib/diff'
 import { highlightHunk, languageOf, withMark, type Token } from '../lib/highlight'
 import { ago } from '../lib/format'
 import { Icon } from './icons'
+import { Markdown } from './Markdown'
 import { errMsg, useToast } from './ui'
 
 export interface DiffActions {
@@ -131,7 +132,7 @@ export function MyComment({ c, actions }: { c: Comment; actions: DiffActions }) 
           <button type="button" className="btn ghost xs danger-text" onClick={() => actions.onDelete(c.id)}>Remove</button>
         </>}
       </div>
-      <div className="note-body">{c.body}</div>
+      <Markdown className="note-body" md={c.body} />
     </div>
   )
 }
@@ -143,7 +144,7 @@ function GHThread({ t, onReply }: { t: Thread; onReply?: (to: number, body: stri
       {t.comments.map(c => (
         <div key={c.id} className="gh-c">
           <div className="note-head">{c.user.avatar_url && <img className="gh-ava" src={c.user.avatar_url} alt="" />}<b>{c.user.login}</b><span className="muted small">{ago(c.created_at)}</span></div>
-          <div className="note-body">{c.body}</div>
+          <Markdown className="note-body" md={c.body} html={c.body_html} />
         </div>
       ))}
       <div className="row">

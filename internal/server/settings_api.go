@@ -40,7 +40,7 @@ func (s *Server) publicSettings(ctx context.Context, u *store.User, st store.Set
 		"github_token": mask(st.GitHubToken), "github_api_url": st.GitHubAPIURL, "github_login": st.GitHubLogin, "github_configured": st.GitHubToken != "",
 		"sync_requested": st.SyncRequested, "sync_authored": st.SyncAuthored, "sync_reviewed": st.SyncReviewed, "sync_repos": st.SyncRepos,
 		"exclude_drafts": st.ExcludeDrafts, "auto_walk": st.AutoWalk, "walk_language": st.WalkLanguage, "walk_hints": st.WalkHints,
-		"open_view": st.OpenView, "diff_wrap": st.DiffWrap,
+		"open_view": st.OpenView, "diff_wrap": st.DiffWrap, "auto_view_tests": st.AutoTests,
 		"notify_requested": st.NotifyRequested, "notify_ready": st.NotifyReady,
 		"notify_url": st.NotifyURL, "notify_format": st.NotifyFormat, "notify_configured": st.NotifyURL != "",
 		"ai_url": st.AIAgentURL, "ai_token": mask(st.AIAgentToken), "ai_public_url": st.AIAgentPublicURL,
@@ -178,6 +178,7 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		cur.WalkHints = strings.TrimSpace(in.WalkHints)
 	}
 	boolIn("diff_wrap", &cur.DiffWrap, in.DiffWrap)
+	boolIn("auto_view_tests", &cur.AutoTests, in.AutoTests)
 	boolIn("notify_requested", &cur.NotifyRequested, in.NotifyRequested)
 	boolIn("notify_ready", &cur.NotifyReady, in.NotifyReady)
 	text("notify_url", &cur.NotifyURL, in.NotifyURL)

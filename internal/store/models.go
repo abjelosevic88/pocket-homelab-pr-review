@@ -188,11 +188,12 @@ type Settings struct {
 	ExcludeDrafts bool   `json:"exclude_drafts"`
 
 	// Walkthroughs.
-	AutoWalk     string `json:"auto_walk"`     // requested | all | off: make one by itself
-	WalkLanguage string `json:"walk_language"` // "" = English
-	WalkHints    string `json:"walk_hints"`    // the person's own hints for the order (any repo)
-	OpenView     string `json:"open_view"`     // steps | built | files: what a PR opens on
-	DiffWrap     bool   `json:"diff_wrap"`     // wrap long lines
+	AutoWalk     string `json:"auto_walk"`       // requested | all | off: make one by itself
+	WalkLanguage string `json:"walk_language"`   // "" = English
+	WalkHints    string `json:"walk_hints"`      // the person's own hints for the order (any repo)
+	OpenView     string `json:"open_view"`       // steps | built | files: what a PR opens on
+	DiffWrap     bool   `json:"diff_wrap"`       // wrap long lines
+	AutoTests    bool   `json:"auto_view_tests"` // test files count as looked at by themselves
 
 	// Notifications.
 	NotifyURL       string `json:"notify_url"`

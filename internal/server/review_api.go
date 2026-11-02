@@ -142,7 +142,7 @@ func (s *Server) handleThreads(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"threads": []thread{}, "error": err.Error()})
 		return
 	}
-	key := fmt.Sprintf("threads:%d:%d", uid, p.ID)
+	key := fmt.Sprintf("threads2:%d:%d", uid, p.ID) // 2: with body_html
 	if v, at, ok := s.store.CacheGet(ctx, key); ok && !queryBool(r, "fresh") {
 		if t, err := time.Parse(time.RFC3339Nano, at); err == nil && time.Since(t) < 30*time.Second {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")

@@ -38,6 +38,10 @@ const unitDone = (u: Unit, viewed: Viewed) => u.hashes.length > 0 && u.hashes.ev
 const unitChanged = (u: Unit, viewed: Viewed) => !unitDone(u, viewed) && !!viewed[u.path] && Object.keys(viewed[u.path]).length > 0
 const stepDone = (s: Step, viewed: Viewed) => s.units.length > 0 && s.units.every(u => unitDone(u, viewed))
 
+/** A test: in the tests layer, or named like one (foo.test.ts, foo_test.go, tests/, __tests__/, spec/). */
+const TEST_PATH = /(^|\/)(__tests__|tests?|spec|e2e)\/|[._-](test|spec)\.[a-z0-9]+$|_test\.go$|(^|\/)test_[^/]+\.py$/i
+const isTest = (u: Unit) => u.layer === 'tests' || TEST_PATH.test(u.path)
+
 const LAYER_LABEL: Record<string, string> = { schema: 'database', model: 'model', data: 'data access', logic: 'logic', api: 'API', config: 'config', ui: 'UI', tests: 'tests', docs: 'docs', build: 'build', noise: 'generated' }
 
 export default function Pull() {
@@ -102,6 +106,16 @@ export default function Pull() {
       announceChange()
     } catch (e) { toast(errMsg(e), 'err') }
   }
+  // Settings → test files count as looked at: mark the ones not looked at yet,
+  // once per walkthrough this page shows (unchecking one keeps it unchecked here)
+  const autoDone = useRef(new Set<number>())
+  const wid = page?.walkthrough?.status === 'ready' ? page.walkthrough.id : 0
+  useEffect(() => {
+    if (!settings?.auto_view_tests || !doc || !wid || autoDone.current.has(wid)) return
+    autoDone.current.add(wid)
+    const todo = doc.steps.flatMap(s => s.units).filter(u => isTest(u) && u.hashes.length > 0 && !unitDone(u, viewed))
+    if (todo.length) setViewed(todo, true)
+  }, [settings?.auto_view_tests, wid]) // eslint-disable-line react-hooks/exhaustive-deps
   const actions: DiffActions = {
     canComment: !!page,
     onAdd: async c => { const nc = await api.post<Comment>(`${V1}/pulls/${id}/comments`, { ...c, commit_sha: page?.walkthrough?.head_sha }); setPage(p => p && { ...p, comments: [...p.comments, nc] }); announceChange() },

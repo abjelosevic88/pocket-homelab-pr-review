@@ -10,7 +10,7 @@ export interface Settings {
   title: string; date_format: string; time_format: string; week_start: number
   github_token: string; github_api_url: string; github_login: string; github_configured: boolean
   sync_requested: boolean; sync_authored: boolean; sync_reviewed: boolean; sync_repos: string; exclude_drafts: boolean
-  auto_walk: 'requested' | 'all' | 'off'; walk_language: string; walk_hints: string; open_view: View; diff_wrap: boolean
+  auto_walk: 'requested' | 'all' | 'off'; walk_language: string; walk_hints: string; open_view: View; diff_wrap: boolean; auto_view_tests: boolean
   notify_requested: boolean; notify_ready: boolean
   notify_url: string; notify_format: string; notify_configured: boolean
   ai_mode: ConnMode; ai_via: ConnVia; ai_detail: string; ai_open_url: string; ai_configured: boolean
@@ -59,7 +59,7 @@ export interface Comment { id: number; pull_id: number; commit_sha: string; path
 export interface Review { id: number; pull_id: number; event: 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT'; body: string; commit_sha: string; comments: number; gh_id: number; gh_url: string; day: string; created_at: string; repo?: string; number?: number; title?: string }
 export interface WalkVersion { id: number; head_sha: string; status: WalkStatus; ai: string; created_at: string; finished_at: string }
 
-export interface GHComment { id: number; in_reply_to_id: number; path: string; line: number | null; side: string; body: string; user: { login: string; avatar_url: string }; html_url: string; created_at: string }
+export interface GHComment { id: number; in_reply_to_id: number; path: string; line: number | null; side: string; body: string; body_html?: string; user: { login: string; avatar_url: string }; html_url: string; created_at: string }
 export interface Thread { id: number; path: string; line: number; side: string; outdated: boolean; url: string; comments: GHComment[] }
 
 export type Viewed = Record<string, Record<string, string>>
