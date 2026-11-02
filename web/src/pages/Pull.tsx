@@ -24,6 +24,7 @@ function normalize(p: PullPage): PullPage {
   if (d) {
     d.steps = (d.steps || []).map(s => ({ ...s, risks: s.risks || [], units: (s.units || []).map(u => ({ ...u, hashes: u.hashes || [] })) }))
     d.noise = d.noise || []; d.risks = (d.risks || []).map(r => ({ ...r, units: r.units || [] })); d.questions = d.questions || []; d.warnings = d.warnings || []
+    d.flow = (d.flow || []).map(g => ({ ...g, items: g.items || [], steps: g.steps || [] })); d.terms = d.terms || []
   }
   if (p.walkthrough) p.walkthrough.timeline = (p.walkthrough.timeline || []).map(e => ({ ...e, files: e.files || [] }))
   p.files = (p.files || []).map(f => ({ ...f, hunks: f.hunks || [] }))
@@ -199,7 +200,7 @@ export default function Pull() {
               <div className="walk-main">
                 {mobile && <Select ariaLabel="Step" value={stepKey} onChange={goStep} options={[{ value: OVERVIEW, label: 'In one minute' }, ...steps.map((s, i) => ({ value: s.key, label: `${i + 1}. ${s.title}${stepDone(s, viewed) ? ' ✓' : ''}` }))]} />}
                 {stepIdx < 0
-                  ? <Overview doc={doc} pull={page} onStart={() => steps[0] && goStep(steps[0].key)} onAsk={() => setModal('ask')} />
+                  ? <Overview doc={doc} pull={page} viewed={viewed} onGo={goStep} onStart={() => steps[0] && goStep(steps[0].key)} onAsk={() => setModal('ask')} />
                   : <StepView step={steps[stepIdx]} index={stepIdx} total={steps.length} files={files} viewed={viewed} comments={comments} threads={threads} actions={actions}
                       wrap={!!settings?.diff_wrap} onViewed={setViewed} onNote={addStepNote}
                       onPrev={() => goStep(stepIdx > 0 ? steps[stepIdx - 1].key : OVERVIEW)} onNext={markAndNext} last={stepIdx === steps.length - 1} onFinish={() => setModal('review')} onAsk={() => setModal('ask')} />}
@@ -245,34 +246,124 @@ function StepList({ steps, doc, current, viewed, drafts, onGo }: { steps: Step[]
   )
 }
 
-function Overview({ doc, pull, onStart, onAsk }: { doc: Doc; pull: PullPage; onStart: () => void; onAsk: () => void }) {
-  const unitPath = (id: string) => doc.steps.flatMap(s => s.units).find(u => u.id === id)?.path
+/** The first sentence, and the rest, of a paragraph. */
+function splitFirst(t: string): [string, string] {
+  const m = t.match(/^(.+?[.!?])\s+(.+)$/s)
+  return m ? [m[1], m[2]] : [t, '']
+}
+
+const baseName = (p: string) => p.split('/').pop() || p
+
+/** Changed lines in one unit: the whole file, or only its hunks in this step. */
+function unitLines(u: Unit, f?: WFile) {
+  if (!f) return 0
+  if (!u.hunks) return f.additions + f.deletions
+  return u.hunks.reduce((n, i) => n + (f.hunks[i]?.lines.filter(l => l.t === '+' || l.t === '-').length || 0), 0)
+}
+
+function Overview({ doc, pull, viewed, onGo, onStart, onAsk }: { doc: Doc; pull: PullPage; viewed: Viewed; onGo: (k: string) => void; onStart: () => void; onAsk: () => void }) {
+  const [more, setMore] = useState(false)
+  const files = useMemo(() => new Map(pull.files.map(f => [f.path, f])), [pull.files])
+  const stepOfUnit = useMemo(() => {
+    const m = new Map<string, Step>()
+    for (const s of doc.steps) for (const u of s.units) m.set(u.id, s)
+    return m
+  }, [doc])
+  const sizes = doc.steps.map(s => s.units.reduce((n, u) => n + unitLines(u, files.get(u.path)), 0))
+  const biggest = Math.max(1, ...sizes)
+  const text = doc.overview || pull.pull.body || ''
+  const [lead, rest] = doc.tldr ? [doc.tldr, text] : splitFirst(text)
+  const flow = doc.flow || []
+  const terms = doc.terms || []
   return (
     <div className="stack loose">
-      <section className="ov-card">
-        <h3>In one minute</h3>
-        <p className="ov-text">{doc.overview || pull.pull.body || 'No description.'}</p>
+      <section className="ov-card ov-hero">
+        <span className="ov-kicker">In one minute</span>
+        <p className="ov-tldr">{lead || 'No description.'}</p>
+        {rest && (more
+          ? <p className="ov-text muted">{rest}</p>
+          : <button type="button" className="link-btn small" onClick={() => setMore(true)}>More detail</button>)}
         {(doc.before || doc.after) && (
           <div className="ba">
-            {doc.before && <div><span className="ba-l">Before</span><p>{doc.before}</p></div>}
-            {doc.after && <div><span className="ba-l">After</span><p>{doc.after}</p></div>}
+            {doc.before && <div className="ba-before"><span className="ba-l">Before</span><p>{doc.before}</p></div>}
+            <span className="ba-arrow" aria-hidden><Icon name="chevron-right" size={18} /></span>
+            {doc.after && <div className="ba-after"><span className="ba-l">After</span><p>{doc.after}</p></div>}
           </div>
         )}
       </section>
-      {doc.risks.length > 0 && (
+
+      {flow.length > 0 && (
         <section className="ov-card">
-          <h3>Worth a careful look</h3>
-          <ul className="risk-list">{doc.risks.map((r, i) => <li key={i} className={`risk ${r.level}`}><span className={`risk-dot ${r.level}`} title={r.level} /><span>{r.text}{r.units.length > 0 && <span className="muted small"> — {r.units.map(unitPath).filter(Boolean).join(', ')}</span>}</span></li>)}</ul>
+          <h3>How it fits together</h3>
+          <div className="flow" role="list">
+            {flow.map((g, i) => (
+              <div key={i} className="flow-cell" role="listitem">
+                <div className="flow-stage">
+                  <div className="flow-title">{g.title}</div>
+                  <ul className="flow-items">{g.items.map((it, j) => <li key={j}>{it}</li>)}</ul>
+                  {g.steps.length > 0 && <div className="flow-steps">{g.steps.map(n => doc.steps[n - 1] && <button key={n} type="button" className="flow-step" onClick={() => onGo(doc.steps[n - 1].key)} title={doc.steps[n - 1].title}>step {n}</button>)}</div>}
+                </div>
+                {i < flow.length - 1 && <span className="flow-arrow" aria-hidden><Icon name="chevron-right" size={18} /></span>}
+              </div>
+            ))}
+          </div>
         </section>
       )}
+
       <section className="ov-card">
         <h3>Read it in this order</h3>
-        <ol className="ov-steps">{doc.steps.map(s => <li key={s.key}><b>{s.title}</b>{s.why && <span className="muted"> — {s.why}</span>}</li>)}</ol>
+        <ol className="map">
+          {doc.steps.map((s, i) => {
+            const done = stepDone(s, viewed)
+            return (
+              <li key={s.key}>
+                <button type="button" className={`map-row ${done ? 'done' : ''}`} onClick={() => onGo(s.key)} title={s.why}>
+                  <span className="step-num">{done ? <Icon name="check" size={13} strokeWidth={2.6} /> : i + 1}</span>
+                  <span className="map-main">
+                    <span className="map-title">{s.title}</span>
+                    <span className="map-sub muted">
+                      <span className={`layer-chip l-${s.layer}`}>{LAYER_LABEL[s.layer] || s.layer}</span>
+                      {s.units.length} {s.units.length === 1 ? 'file' : 'files'}
+                      {s.risks.length > 0 && <span className="map-risk"><Icon name="alert" size={12} />{s.risks.length} to check</span>}
+                    </span>
+                  </span>
+                  <span className="map-size" title={`${sizes[i]} changed lines`}><span className={`l-${s.layer}`} style={{ width: `${Math.max(4, (sizes[i] / biggest) * 100)}%` }} /></span>
+                </button>
+              </li>
+            )
+          })}
+        </ol>
         <div className="row wrap mt">
           <button type="button" className="btn primary" onClick={onStart}><Icon name="play" size={14} />Start with step 1</button>
           <button type="button" className="btn" onClick={onAsk}><Icon name="sparkles" size={14} />Ask about it</button>
         </div>
       </section>
+
+      {doc.risks.length > 0 && (
+        <section className="ov-card">
+          <h3>Worth a careful look</h3>
+          <ul className="risk-list">{doc.risks.map((r, i) => {
+            const at = r.units.map(id => ({ id, u: doc.steps.flatMap(s => s.units).find(u => u.id === id), s: stepOfUnit.get(id) })).filter(x => x.u)
+            return (
+              <li key={i} className={`risk ${r.level}`}>
+                <span className={`risk-lvl ${r.level}`}>{r.level}</span>
+                <div className="risk-body">
+                  {r.title ? <><b>{r.title}</b><span className="muted small">{r.text}</span></> : <span>{r.text}</span>}
+                  {at.length > 0 && <span className="risk-files">{at.map(x => <button key={x.id} type="button" className="file-chip" title={x.u!.path} onClick={() => x.s && onGo(x.s.key)}>{baseName(x.u!.path)}</button>)}</span>}
+                </div>
+              </li>
+            )
+          })}</ul>
+        </section>
+      )}
+
+      {terms.length > 0 && (
+        <section className="ov-card">
+          <h3>Words you will meet</h3>
+          <dl className="terms">{terms.map((t, i) => <div key={i}><dt><code>{t.term}</code></dt><dd>{t.means}</dd></div>)}</dl>
+        </section>
+      )}
+
       {doc.questions.length > 0 && (
         <section className="ov-card">
           <h3>Questions for the author</h3>

@@ -425,7 +425,10 @@ func demoPRs() []*demoPR {
 			{[]int{1}, "Unrelated: request logging moves from log.Printf to structured slog with the duration."},
 		},
 	}
-	coupons.plan = `{"overview":"Shoppers can now enter a coupon code at checkout and get a percentage off their cart. A new coupons table holds the codes; a repository and a service check expiry and count each use atomically; new routes expose redeeming at checkout and managing coupons for admins. The support chatbot can read the table, and admins get a Coupons page.",
+	coupons.plan = `{"tldr":"Shoppers can use a coupon code at checkout; admins manage the codes.",
+"flow":[{"title":"Shopper or admin","items":["Checkout form","Admin Coupons page"],"steps":[4,6]},{"title":"Routes","items":["POST /checkout/coupon","/admin/coupons"],"steps":[4]},{"title":"Rules","items":["Expiry and use limit","Percent off"],"steps":[3]},{"title":"Storage","items":["coupons table","orders.coupon_id"],"steps":[1,2]},{"title":"Also reads it","items":["Support chatbot"],"steps":[5]}],
+"terms":[{"term":"Redeem","means":"Count one use of a code, in a single conditional UPDATE."}],
+"overview":"Shoppers can now enter a coupon code at checkout and get a percentage off their cart. A new coupons table holds the codes; a repository and a service check expiry and count each use atomically; new routes expose redeeming at checkout and managing coupons for admins. The support chatbot can read the table, and admins get a Coupons page.",
 "before":"No discounts at all: checkout charged the full subtotal and support had to answer coupon questions by hand.",
 "after":"A valid code takes 1–90 % off the subtotal once per use; admins create, limit, expire and pause codes; the chatbot answers questions about them.",
 "steps":[
@@ -436,7 +439,7 @@ func demoPRs() []*demoPR {
 {"title":"The chatbot can see coupons","why":"The chatbot's table list gains coupons, without who created them.","units":["u8"],"risks":[]},
 {"title":"The admin page","why":"What admins see and click.","units":["u10","u9"],"risks":[]},
 {"title":"Docs","why":"What admins read.","units":["u12"],"risks":[]}],
-"risks":[{"level":"high","text":"A coupon's use is counted when it is applied, not when the order is paid: abandoned carts use up limited coupons.","units":["u4"]},{"level":"medium","text":"The PATCH route for pausing points at h.updateCoupon, which this pull request does not add — the build may fail.","units":["u6"]},{"level":"low","text":"The date-fns major upgrade in package-lock.json is not mentioned in the description.","units":[]}],
+"risks":[{"level":"high","title":"Uses counted before payment","text":"A coupon's use is counted when it is applied, not when the order is paid: abandoned carts use up limited coupons.","units":["u4"]},{"level":"medium","title":"Missing updateCoupon handler","text":"The PATCH route for pausing points at h.updateCoupon, which this pull request does not add — the build may fail.","units":["u6"]},{"level":"low","title":"Unmentioned date-fns upgrade","text":"The date-fns major upgrade in package-lock.json is not mentioned in the description.","units":[]}],
 "questions":["Should a use be counted at payment instead of when the code is applied?","Where is updateCoupon defined?","Is the date-fns 4 upgrade intended in this PR?"]}`
 
 	rounding := &demoPR{repo: "acme/shop", number: 139, title: "Fix rounding of invoice totals with several tax rates",

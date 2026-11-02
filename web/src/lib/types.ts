@@ -37,9 +37,11 @@ export interface PullList { pulls: Pull[]; github: { connected: boolean; login: 
 
 export interface Unit { id: string; path: string; hunks: number[] | null; hashes: string[]; summary: string; layer: string }
 export interface Step { key: string; title: string; why: string; layer: string; risks: string[]; units: Unit[] }
-export interface Risk { level: 'high' | 'medium' | 'low'; text: string; units: string[] }
+export interface Risk { level: 'high' | 'medium' | 'low'; title?: string; text: string; units: string[] }
+export interface Stage { title: string; items: string[]; steps: number[] }
+export interface Term { term: string; means: string }
 export interface Doc {
-  title: string; overview: string; before: string; after: string; steps: Step[]; noise: Unit[]; risks: Risk[]; questions: string[]
+  title: string; tldr?: string; overview: string; flow?: Stage[]; terms?: Term[]; before: string; after: string; steps: Step[]; noise: Unit[]; risks: Risk[]; questions: string[]
   order: 'ai' | 'layers'; warnings: string[]; stats: { steps: number; units: number; files: number; additions: number; deletions: number }
 }
 export interface TFile { path: string; status: string; additions: number; deletions: number; patch?: string; note?: string }

@@ -50,6 +50,7 @@ type AI interface {
 // Doc is a finished walkthrough.
 type Doc struct {
 	Title     string   `json:"title"`
+	TLDR      string   `json:"tldr,omitempty"`
 	Overview  string   `json:"overview"`
 	Before    string   `json:"before"`
 	After     string   `json:"after"`
@@ -57,7 +58,9 @@ type Doc struct {
 	Noise     []Unit   `json:"noise"`
 	Risks     []Risk   `json:"risks"`
 	Questions []string `json:"questions"`
-	Order     string   `json:"order"` // ai | layers: who decided the order
+	Flow      []Stage  `json:"flow,omitempty"`  // how the pieces connect, left to right
+	Terms     []Term   `json:"terms,omitempty"` // words a newcomer needs
+	Order     string   `json:"order"`           // ai | layers: who decided the order
 	Warnings  []string `json:"warnings"`
 	Stats     Stats    `json:"stats"`
 	Edges     []Edge   `json:"edges,omitempty"`
@@ -83,9 +86,23 @@ type Unit struct {
 	Layer   string   `json:"layer"`
 }
 
+// Stage is one column of the diagram of how the change fits together.
+type Stage struct {
+	Title string   `json:"title"`
+	Items []string `json:"items"`
+	Steps []int    `json:"steps"` // 1-based walkthrough steps it is about
+}
+
+// Term is a word of the codebase explained for someone new to it.
+type Term struct {
+	Term  string `json:"term"`
+	Means string `json:"means"`
+}
+
 // Risk is something worth a careful look.
 type Risk struct {
 	Level string   `json:"level"` // high | medium | low
+	Title string   `json:"title,omitempty"`
 	Text  string   `json:"text"`
 	Units []string `json:"units"`
 }
@@ -426,16 +443,19 @@ const planVoice = `You turn a pull request into a guided walkthrough for its rev
 Arrange them into the order a reviewer should read them — from the foundation up: the data and schema first, then the code that reads and writes it, the logic built on it, the API or routes that expose it, the configuration, prompts and integrations that use it, then the screens; each test next to or right after what it tests. Follow the story of the change, not the alphabet.
 Group the units that belong to one idea into one step: usually 3 to 9 steps, a tiny pull request may have 1 or 2. For each step write:
 - title: short, naming the concrete thing ("Migration for the coupons table", "Routes to create and redeem a coupon")
-- why: one or two sentences — what this step does in the whole change and what to check
+- why: one or two short sentences — what this step does in the whole change and what to check
 - units: the unit ids in reading order
 - risks: concrete things in this step worth a careful look (empty when there are none); never generic advice
-Also write:
-- overview: the pull request in one minute — 3 to 5 sentences: the problem, the approach, what changes for the people using it
-- before / after: how it behaves before and after, one or two sentences each
-- risks: the most important concerns across the pull request, each with level high, medium or low and the unit ids it is about
-- questions: up to 5 things the reviewer should ask the author
+Also write, for a reviewer who has never seen this codebase or this pull request — plain words, short, no file paths in the prose:
+- tldr: one sentence of at most 20 words: what this pull request does and for whom
+- overview: 2 or 3 short sentences: the problem and the approach
+- before / after: how it behaves before and after, at most 20 words each
+- flow: a diagram of how the new pieces connect, 2 to 5 stages left to right (where it starts → what it goes through → where it ends up: e.g. triggers → logic → storage → API → screen). Each stage: title of 1 to 3 words, items of 1 to 4 short labels (at most 5 words each, concrete names), steps = the 1-based step numbers it is about
+- terms: up to 5 words or names of this codebase a newcomer would not know, each explained in at most 12 words (empty when nothing needs explaining)
+- risks: the most important concerns across the pull request, each with level high, medium or low, a title of at most 8 words, text of at most 30 words, and the unit ids it is about
+- questions: up to 4 short things the reviewer should ask the author
 Every unit id must appear in exactly one step. Do not invent changes that are not in the units.
-Answer with JSON only: {"overview":"…","before":"…","after":"…","steps":[{"title":"…","why":"…","units":["u1"],"risks":["…"]}],"risks":[{"level":"medium","text":"…","units":["u3"]}],"questions":["…"]}`
+Answer with JSON only: {"tldr":"…","overview":"…","before":"…","after":"…","flow":[{"title":"…","items":["…"],"steps":[1]}],"terms":[{"term":"…","means":"…"}],"steps":[{"title":"…","why":"…","units":["u1"],"risks":["…"]}],"risks":[{"level":"medium","title":"…","text":"…","units":["u3"]}],"questions":["…"]}`
 
 func plan(ctx context.Context, in Input, units []Unit, edges []Edge, ai AI, doc *Doc) error {
 	var sb strings.Builder
@@ -490,6 +510,13 @@ func plan(ctx context.Context, in Input, units []Unit, edges []Edge, ai AI, doc 
 		return err
 	}
 	var res struct {
+		TLDR string `json:"tldr"`
+		Flow []struct {
+			Title string   `json:"title"`
+			Items []string `json:"items"`
+			Steps []int    `json:"steps"`
+		} `json:"flow"`
+		Terms    []Term `json:"terms"`
 		Overview string `json:"overview"`
 		Before   string `json:"before"`
 		After    string `json:"after"`
@@ -501,6 +528,7 @@ func plan(ctx context.Context, in Input, units []Unit, edges []Edge, ai AI, doc 
 		} `json:"steps"`
 		Risks []struct {
 			Level string   `json:"level"`
+			Title string   `json:"title"`
 			Text  string   `json:"text"`
 			Units []string `json:"units"`
 		} `json:"risks"`
@@ -575,7 +603,32 @@ func plan(ctx context.Context, in Input, units []Unit, edges []Edge, ai AI, doc 
 		return fmt.Errorf("the steps had no known units")
 	}
 	doc.Steps = steps
+	doc.TLDR = oneLine(res.TLDR, 240)
 	doc.Overview = strings.TrimSpace(res.Overview)
+	for _, st := range res.Flow {
+		if len(doc.Flow) >= 6 {
+			break
+		}
+		g := Stage{Title: oneLine(st.Title, 40), Items: []string{}, Steps: []int{}}
+		for _, it := range st.Items {
+			if it = oneLine(it, 60); it != "" && len(g.Items) < 5 {
+				g.Items = append(g.Items, it)
+			}
+		}
+		for _, n := range st.Steps {
+			if n >= 1 && n <= len(steps) {
+				g.Steps = append(g.Steps, n)
+			}
+		}
+		if g.Title != "" || len(g.Items) > 0 {
+			doc.Flow = append(doc.Flow, g)
+		}
+	}
+	for _, t := range res.Terms {
+		if t.Term, t.Means = oneLine(t.Term, 60), oneLine(t.Means, 200); t.Term != "" && t.Means != "" && len(doc.Terms) < 6 {
+			doc.Terms = append(doc.Terms, t)
+		}
+	}
 	doc.Before = strings.TrimSpace(res.Before)
 	doc.After = strings.TrimSpace(res.After)
 	for _, r := range res.Risks {
@@ -590,7 +643,7 @@ func plan(ctx context.Context, in Input, units []Unit, edges []Edge, ai AI, doc 
 			}
 		}
 		if t := oneLine(r.Text, 600); t != "" {
-			doc.Risks = append(doc.Risks, Risk{Level: lvl, Text: t, Units: ids})
+			doc.Risks = append(doc.Risks, Risk{Level: lvl, Title: oneLine(r.Title, 100), Text: t, Units: ids})
 		}
 	}
 	for _, q := range res.Questions {

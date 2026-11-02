@@ -42,8 +42,22 @@ func Markdown(d *Doc, prURL, title string, link func(path string) string) string
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "## Walkthrough: %s\n\n", title)
+	if d.TLDR != "" {
+		fmt.Fprintf(&b, "> %s\n\n", d.TLDR)
+	}
 	if d.Overview != "" {
 		fmt.Fprintf(&b, "**In one minute.** %s\n\n", d.Overview)
+	}
+	if len(d.Flow) > 0 {
+		parts := make([]string, 0, len(d.Flow))
+		for _, st := range d.Flow {
+			p := "**" + st.Title + "**"
+			if len(st.Items) > 0 {
+				p += " (" + strings.Join(st.Items, ", ") + ")"
+			}
+			parts = append(parts, p)
+		}
+		fmt.Fprintf(&b, "**How it fits together:** %s\n\n", strings.Join(parts, " → "))
 	}
 	if d.Before != "" || d.After != "" {
 		if d.Before != "" {
@@ -57,7 +71,11 @@ func Markdown(d *Doc, prURL, title string, link func(path string) string) string
 	if len(d.Risks) > 0 {
 		b.WriteString("**Worth a careful look**\n\n")
 		for _, r := range d.Risks {
-			fmt.Fprintf(&b, "- %s %s\n", riskMark(r.Level), r.Text)
+			if r.Title != "" {
+				fmt.Fprintf(&b, "- %s **%s** — %s\n", riskMark(r.Level), r.Title, r.Text)
+			} else {
+				fmt.Fprintf(&b, "- %s %s\n", riskMark(r.Level), r.Text)
+			}
 		}
 		b.WriteString("\n")
 	}
