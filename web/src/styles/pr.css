@@ -471,3 +471,5 @@
 [data-theme="dark"] .md .pl-c { color: #8b949e; } [data-theme="dark"] .md .pl-c1, [data-theme="dark"] .md .pl-v, [data-theme="dark"] .md .pl-smi, [data-theme="dark"] .md .pl-ent { color: #79c0ff; }
 .md .task-list-item, .md li:has(> input[type="checkbox"]) { list-style: none; margin-left: -18px; }
 .md strong, .md b { font-weight: 650; }
+/* .xs is an icon's square; a worded one (Reply, On GitHub, Edit) needs its own width */
+.btn.xs:not(.icon-only) { width: auto; padding: 0 8px; gap: 4px; font-size: 12px; white-space: nowrap; }
