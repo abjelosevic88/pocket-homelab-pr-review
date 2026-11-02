@@ -139,8 +139,31 @@ export function MyComment({ c, actions }: { c: Comment; actions: DiffActions }) 
 
 function GHThread({ t, onReply }: { t: Thread; onReply?: (to: number, body: string) => Promise<void> }) {
   const [replying, setReplying] = useState(false)
+  // a resolved conversation folds to one line; an open one shows in full
+  const [open, setOpen] = useState(!t.resolved)
+  const first = t.comments[0]
+  const n = t.comments.length
+  if (!open) {
+    const gist = (first?.body || '').replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, ' ').replace(/[*_`#>\[\]]/g, '').replace(/\s+/g, ' ').trim()
+    return (
+      <button type="button" className="note-card gh resolved folded" onClick={() => setOpen(true)} aria-expanded={false} title="Show the conversation">
+        <Icon name="check-circle" size={14} />
+        <span className="gh-res-label">Resolved{t.resolved_by ? ` by ${t.resolved_by}` : ''}</span>
+        <span className="gh-res-gist"><b>{first?.user.login}</b>{gist ? `: ${gist}` : ''}</span>
+        {n > 1 && <span className="muted small">{n} comments</span>}
+        <Icon name="chevron-down" size={14} />
+      </button>
+    )
+  }
   return (
-    <div className="note-card gh">
+    <div className={`note-card gh ${t.resolved ? 'resolved' : t.resolved === false ? 'unresolved' : ''}`}>
+      {t.resolved != null && (
+        <div className={`gh-state ${t.resolved ? 'ok' : 'open'}`}>
+          <Icon name={t.resolved ? 'check-circle' : 'message'} size={13} />
+          {t.resolved ? `Resolved${t.resolved_by ? ` by ${t.resolved_by}` : ''}` : 'Open conversation'}
+          {t.resolved && <button type="button" className="link-btn small" onClick={() => setOpen(false)}>Fold</button>}
+        </div>
+      )}
       {t.comments.map(c => (
         <div key={c.id} className="gh-c">
           <div className="note-head">{c.user.avatar_url && <img className="gh-ava" src={c.user.avatar_url} alt="" />}<b>{c.user.login}</b><span className="muted small">{ago(c.created_at)}</span></div>

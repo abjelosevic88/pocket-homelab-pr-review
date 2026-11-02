@@ -495,3 +495,16 @@ button.ghs-chip:not(:disabled):hover, a.ghs-chip:hover { background: var(--hover
 .ghs-checks li.passed .icon { color: var(--success); } .ghs-checks li.failed .icon { color: var(--danger); }
 .ghs-checks li.running .icon { color: var(--warning); } .ghs-checks li.skipped .icon { color: var(--faint); }
 .ghs-checks li.failed { background: var(--danger-soft); }
+/* GitHub conversations: resolved fold to a line, open ones stand out */
+.note-card.gh.unresolved { border-left: 3px solid var(--warning); }
+.note-card.gh.resolved:not(.folded) { border-left: 3px solid var(--success); }
+.gh-state { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; margin: -2px 0 6px; }
+.gh-state.ok { color: var(--success); } .gh-state.open { color: var(--warning); }
+.gh-state .link-btn { margin-left: auto; font-weight: 500; }
+.note-card.gh.folded { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; cursor: pointer; color: var(--text-2); padding: 6px 10px;
+  background: var(--success-soft); border-color: color-mix(in srgb, var(--success) 30%, var(--border)); font: inherit; font-size: 13px; }
+.note-card.gh.folded:hover { border-color: var(--success); }
+.note-card.gh.folded > .icon:first-child { color: var(--success); flex-shrink: 0; }
+.gh-res-label { color: var(--success); font-weight: 600; white-space: nowrap; }
+.gh-res-gist { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gh-res-gist b { font-weight: 600; color: var(--text); }
