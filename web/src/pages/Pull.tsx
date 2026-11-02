@@ -14,6 +14,7 @@ import { ReviewModal } from '../components/ReviewModal'
 import { AgentModal } from '../components/AgentModal'
 import { Select } from '../components/Select'
 import { DataFlow } from '../components/DataFlow'
+import { PullStatus } from '../components/PullStatus'
 import { Empty, Loading, MenuButton, type MenuItem, Modal, Segmented, Spinner, copyText, errMsg, modalOpen, useIsMobile, useToast } from '../components/ui'
 import { WalkPill, reviewBadge } from './Inbox'
 
@@ -192,9 +193,10 @@ export default function Pull() {
             <span>{p.repo}</span>
             <span className="pr-author">{p.author_avatar && <img src={p.author_avatar} alt="" />}{p.author}</span>
             <span className="branch"><code>{p.base_ref}</code> ← <code>{p.head_ref}</code></span>
-            <span className="tnum"><span className="add">+{p.additions}</span> <span className="del">−{p.deletions}</span> · {p.changed_files} files · {p.commits} commits</span>
+            <span className="tnum"><span className="add">+{p.additions}</span> <span className="del">−{p.deletions}</span> · {p.changed_files} file{p.changed_files === 1 ? '' : 's'} · {p.commits} commit{p.commits === 1 ? '' : 's'}</span>
             {reviewBadge(p)}
           </div>
+          {(page.github.connected || settings?.demo) && <PullStatus key={`${p.id}:${p.head_sha}`} pullId={p.id} base={p.base_ref} prUrl={p.url} />}
         </div>
         <div className="pr-head-actions">
           <button type="button" className="btn primary" onClick={() => setModal('review')} title="Finish the review (c)"><Icon name="check" size={15} />{mobile ? 'Review' : 'Finish the review'}{drafts.length > 0 && <span className="badge">{drafts.length}</span>}</button>

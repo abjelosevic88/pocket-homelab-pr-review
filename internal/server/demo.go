@@ -722,3 +722,25 @@ const demoBotComment = "<!-- review-bot:v1 -->\n\n**Major** · **Data integrity*
 	"_The use is counted before the order is paid._ `Apply` calls `Redeem` right away, so an abandoned checkout still uses up a limited coupon.\n\n" +
 	"<details>\n<summary>How this was checked</summary>\n\n```bash\nrg -n \"Redeem\\(\" internal/\n```\n\n| File | Line |\n|---|---|\n| `service.go` | 12 |\n\n</details>\n\n" +
 	"Suggested fix:\n\n```go\nif err := s.repo.Redeem(ctx, c.ID); err != nil {\n\treturn Discount{}, err\n}\n```\n\n- [ ] count the use when the order is paid\n- [x] keep the conditional UPDATE"
+
+// demoStatus is a made-up GitHub status: CI part failing, one approval, one
+// person still asked, conversations open, a little behind its base.
+func demoStatus(p *store.Pull) *github.Status {
+	st := &github.Status{State: "OPEN", Mergeable: "MERGEABLE", MergeState: "BLOCKED", Behind: 3, Commits: p.Commits, ReviewDecision: "REVIEW_REQUIRED",
+		Approved: []string{"dino"}, ChangesWanted: []string{}, Commented: []string{"coderabbitai[bot]"}, Requested: []string{"maya", "payments (team)"},
+		Threads: 3, Unresolved: 2, Outdated: 0, Comments: 5, Warnings: []string{},
+		Checks: github.Checks{Known: true, State: "FAILURE", Passed: 5, Failed: 1, Running: 1, Items: []github.Check{
+			{Name: "CI / test (go)", Result: "failed", Detail: "FAILURE", URL: p.URL + "/checks"},
+			{Name: "CI / e2e", Result: "running", Detail: "IN_PROGRESS", URL: p.URL + "/checks"},
+			{Name: "CI / build", Result: "passed", Detail: "SUCCESS", URL: p.URL + "/checks"},
+			{Name: "CI / lint", Result: "passed", Detail: "SUCCESS", URL: p.URL + "/checks"},
+			{Name: "CI / typecheck", Result: "passed", Detail: "SUCCESS", URL: p.URL + "/checks"},
+			{Name: "CodeRabbit", Result: "passed", Detail: "SUCCESS", URL: p.URL},
+			{Name: "Vercel – preview", Result: "passed", Detail: "SUCCESS", URL: p.URL},
+		}}}
+	if p.Number != 142 {
+		st.MergeState, st.Behind, st.ReviewDecision, st.Approved, st.Requested, st.Unresolved, st.Threads = "CLEAN", 0, "APPROVED", []string{"sara-k"}, []string{}, 0, 1
+		st.Checks = github.Checks{Known: true, State: "SUCCESS", Passed: 4, Items: []github.Check{{Name: "CI / test", Result: "passed", Detail: "SUCCESS"}, {Name: "CI / build", Result: "passed", Detail: "SUCCESS"}, {Name: "CI / lint", Result: "passed", Detail: "SUCCESS"}, {Name: "CI / typecheck", Result: "passed", Detail: "SUCCESS"}}}
+	}
+	return st
+}

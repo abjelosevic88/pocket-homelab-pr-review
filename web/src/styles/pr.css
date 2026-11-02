@@ -473,3 +473,25 @@
 .md strong, .md b { font-weight: 650; }
 /* .xs is an icon's square; a worded one (Reply, On GitHub, Edit) needs its own width */
 .btn.xs:not(.icon-only) { width: auto; padding: 0 8px; gap: 4px; font-size: 12px; white-space: nowrap; }
+/* where the pull request stands on GitHub */
+.ghs-wrap { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.ghs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ghs-chip { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border-radius: 999px; font: inherit; font-size: 12.5px; font-weight: 550; white-space: nowrap;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-2); text-decoration: none; }
+button.ghs-chip { cursor: pointer; } button.ghs-chip:disabled { cursor: default; }
+button.ghs-chip:not(:disabled):hover, a.ghs-chip:hover { background: var(--hover); }
+.ghs-chip.ok { color: var(--success); border-color: color-mix(in srgb, var(--success) 35%, var(--border)); background: var(--success-soft); }
+.ghs-chip.bad { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); background: var(--danger-soft); }
+.ghs-chip.warn { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 35%, var(--border)); background: var(--warning-soft); }
+.ghs-chip.muted { color: var(--muted); }
+.ghs-chip.plain { border-color: transparent; background: none; padding: 0 4px; font-weight: 450; }
+.ghs-k { font-size: 10.5px; font-weight: 750; letter-spacing: .04em; opacity: .85; }
+.ghs-refresh { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 999px; border: 0; background: none; color: var(--muted); cursor: pointer; }
+.ghs-refresh:hover { background: var(--hover); color: var(--text); }
+.ghs-checks { list-style: none; margin: 0; padding: 6px; display: grid; gap: 1px; max-width: 620px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); max-height: 320px; overflow-y: auto; }
+.ghs-checks li { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; font-size: 13px; min-width: 0; }
+.ghs-checks li > a, .ghs-checks li > span:first-of-type { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.ghs-checks li > a:hover { text-decoration: underline; }
+.ghs-checks li.passed .icon { color: var(--success); } .ghs-checks li.failed .icon { color: var(--danger); }
+.ghs-checks li.running .icon { color: var(--warning); } .ghs-checks li.skipped .icon { color: var(--faint); }
+.ghs-checks li.failed { background: var(--danger-soft); }

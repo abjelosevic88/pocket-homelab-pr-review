@@ -404,3 +404,42 @@ func languageNote(lang string) string {
 	}
 	return "\nAnswer in " + lang + "."
 }
+
+// handlePullStatus is where the pull request stands on GitHub now: checks,
+// merging, reviews and open conversations. Kept for a minute.
+func (s *Server) handlePullStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	uid := actorID(ctx)
+	p, err := s.store.GetPull(ctx, uid, idParam(r, "id"))
+	if err != nil {
+		s.fail(w, err, "pull request")
+		return
+	}
+	if s.cfg.DemoData {
+		writeJSON(w, http.StatusOK, map[string]any{"status": demoStatus(p)})
+		return
+	}
+	st, _ := s.store.GetSettings(ctx, uid)
+	gh, err := s.ghFor(st)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"status": nil, "error": err.Error()})
+		return
+	}
+	key := fmt.Sprintf("status:%d:%d", uid, p.ID)
+	if v, at, ok := s.store.CacheGet(ctx, key); ok && !queryBool(r, "fresh") {
+		if t, err := time.Parse(time.RFC3339Nano, at); err == nil && time.Since(t) < time.Minute {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			_, _ = w.Write([]byte(v))
+			return
+		}
+	}
+	status, err := gh.PullStatus(ctx, p.Repo, p.Number)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"status": nil, "error": err.Error()})
+		return
+	}
+	b, _ := json.Marshal(map[string]any{"status": status, "checked_at": time.Now().UTC().Format(time.RFC3339)})
+	_ = s.store.CachePut(ctx, key, string(b))
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_, _ = w.Write(b)
+}
