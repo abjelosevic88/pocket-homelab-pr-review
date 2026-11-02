@@ -107,12 +107,13 @@ export default function Pull() {
     } catch (e) { toast(errMsg(e), 'err') }
   }
   // Settings → test files count as looked at: mark the ones not looked at yet,
-  // once per walkthrough this page shows (unchecking one keeps it unchecked here)
-  const autoDone = useRef(new Set<number>())
+  // once per walkthrough (remembered in this browser, so a box unchecked to
+  // read a test stays unchecked after a reload)
   const wid = page?.walkthrough?.status === 'ready' ? page.walkthrough.id : 0
   useEffect(() => {
-    if (!settings?.auto_view_tests || !doc || !wid || autoDone.current.has(wid)) return
-    autoDone.current.add(wid)
+    const k = `ppr-auto-tests:${wid}`
+    if (!settings?.auto_view_tests || !doc || !wid || localStorage.getItem(k)) return
+    localStorage.setItem(k, '1')
     const todo = doc.steps.flatMap(s => s.units).filter(u => isTest(u) && u.hashes.length > 0 && !unitDone(u, viewed))
     if (todo.length) setViewed(todo, true)
   }, [settings?.auto_view_tests, wid]) // eslint-disable-line react-hooks/exhaustive-deps
