@@ -288,3 +288,23 @@ func short(sha string) string {
 	}
 	return sha
 }
+
+// handleAIActive lists the pull requests with a Pocket AI conversation
+// working or waiting now (by ref, owner/name#12), for the lists' live mark.
+func (s *Server) handleAIActive(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	sib, err := optional(s.clients(ctx, actorID(ctx)).conn(ctx, appAI, scopeThreadsWrite))
+	if err != nil || sib == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"active": []pocket.Active{}, "connected": false})
+		return
+	}
+	list, err := sib.client.ActiveThreads(ctx, "pr-review")
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"active": []pocket.Active{}, "connected": false})
+		return
+	}
+	if list == nil {
+		list = []pocket.Active{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"active": list, "connected": true})
+}

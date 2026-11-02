@@ -6,6 +6,7 @@ import type { Pull, PullList } from '../lib/types'
 import { ago } from '../lib/format'
 import { announceChange, openAdd, useCrumb, usePulls } from '../components/Layout'
 import { Icon } from '../components/icons'
+import { AIMark } from '../components/AIMark'
 import { Empty, Loading, MenuButton, type MenuItem, Spinner, errMsg, useToast } from '../components/ui'
 
 type ListView = 'waiting' | 'open' | 'mine' | 'done' | 'archived' | 'repo'
@@ -138,6 +139,7 @@ function PullRow({ p, onChange }: { p: Pull; onChange: () => void }) {
             <span className="tnum"><span className="add">+{p.additions}</span> <span className="del">−{p.deletions}</span></span>
           </span>
           <span className="pr-tags">
+            <AIMark refName={`${p.repo}#${p.number}`} label />
             <WalkPill p={p} />
             {reviewBadge(p)}
             {!!p.drafts && <span className="badge"><Icon name="message" size={11} />{p.drafts} not sent</span>}

@@ -219,6 +219,20 @@ func (c *Client) Threads(ctx context.Context, source, ref string) ([]AgentThread
 	return out, c.do(ctx, http.MethodGet, "/api/v1/link/threads", q, nil, &out)
 }
 
+// Active is a conversation an app started that is working or waiting now.
+type Active struct {
+	Ref      string `json:"ref"`
+	Status   string `json:"status"` // running | waiting
+	ThreadID string `json:"thread_id"`
+	URL      string `json:"url"`
+}
+
+// ActiveThreads lists the app's conversations that are working or waiting.
+func (c *Client) ActiveThreads(ctx context.Context, source string) ([]Active, error) {
+	var out []Active
+	return out, c.do(ctx, http.MethodGet, "/api/v1/link/active", url.Values{"source": {source}}, nil, &out)
+}
+
 // AgentEdit is one file edit an agent made in a conversation.
 type AgentEdit struct {
 	At       string `json:"at"`
