@@ -63,6 +63,11 @@ func (s *Server) Router() http.Handler {
 			r.Get("/github/pulls", s.handleGitHubPulls)
 
 			// one pull request
+			// for assistants: find, read without diffs, one file's diff, search the diffs
+			r.Get("/pulls/find", s.handleFindPulls)
+			r.Get("/pulls/{id}/brief", s.handleBrief)
+			r.Get("/pulls/{id}/diff", s.handleFileDiff)
+			r.Get("/pulls/{id}/grep", s.handleGrep)
 			r.Get("/pulls/{id}", s.handleGetPull)
 			r.Delete("/pulls/{id}", s.handleDeletePull)
 			r.Post("/pulls/{id}/archive", s.handleArchivePull)
