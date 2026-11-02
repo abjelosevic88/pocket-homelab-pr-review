@@ -374,3 +374,34 @@
 .flow-items li { overflow-wrap: break-word; hyphens: auto; }
 .terms > div { grid-template-columns: minmax(90px, max-content) 1fr; }
 @media (max-width: 767px) { .terms > div { grid-template-columns: 1fr; } }
+/* how the data moves: the SVG diagram */
+.df { display: flex; flex-direction: column; gap: 10px; }
+.df-scroll { overflow-x: auto; padding: 4px 0; display: flex; justify-content: center; }
+.df-scroll.v { overflow-x: visible; }
+.df-svg { display: block; height: auto; font-family: inherit; }
+.df-edge { fill: none; stroke: var(--faint); stroke-width: 1.6; }
+.df-edge.back { stroke-dasharray: 5 4; }
+.df-head { fill: var(--faint); }
+.df-elabel { font-size: 11px; font-weight: 600; fill: var(--text-2); paint-order: stroke; stroke: var(--surface); stroke-width: 5px; stroke-linejoin: round; }
+.df-node rect:first-of-type { fill: var(--surface); stroke: var(--border-strong, #b6bcc6); stroke-width: 1.2; }
+.df-node.old rect:first-of-type { fill: var(--surface-2); stroke-dasharray: 4 3; }
+.df-node.new rect:first-of-type { stroke: var(--accent); stroke-width: 1.6; }
+.df-node.link { cursor: pointer; }
+.df-node.link:hover rect:first-of-type, .df-node.link:focus rect:first-of-type { fill: var(--accent-soft); outline: none; }
+.df-node:focus { outline: none; }
+.df-band { fill: var(--faint); }
+.df-node.k-actor .df-band, .df-node.k-event .df-band { fill: #d97706; }
+.df-node.k-code .df-band { fill: #0969da; }
+.df-node.k-store .df-band { fill: #8250df; }
+.df-node.k-api .df-band { fill: #bf8700; }
+.df-node.k-ui .df-band { fill: #1a7f37; }
+.df-node.k-external .df-band { fill: #6e7781; }
+.df-kind { font-size: 9.5px; font-weight: 700; letter-spacing: .05em; fill: var(--muted); }
+.df-node.new .df-kind { fill: var(--accent-ink); }
+.df-label { font-size: 13px; font-weight: 600; fill: var(--text); }
+.df-node.old .df-label { fill: var(--text-2); font-weight: 500; }
+.df-step { font-size: 10px; font-weight: 600; fill: var(--accent-ink); }
+.df-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; }
+.df-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.df-key { width: 18px; height: 11px; border-radius: 3px; display: inline-block; border: 1.6px solid var(--accent); background: var(--surface); }
+.df-key.old { border: 1.2px dashed var(--border-strong, #b6bcc6); background: var(--surface-2); }

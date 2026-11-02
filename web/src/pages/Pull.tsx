@@ -13,6 +13,7 @@ import { Composer, Diff, type DiffActions, MyComment } from '../components/Diff'
 import { ReviewModal } from '../components/ReviewModal'
 import { AgentModal } from '../components/AgentModal'
 import { Select } from '../components/Select'
+import { DataFlow } from '../components/DataFlow'
 import { Empty, Loading, MenuButton, type MenuItem, Modal, Segmented, Spinner, copyText, errMsg, modalOpen, useIsMobile, useToast } from '../components/ui'
 import { WalkPill, reviewBadge } from './Inbox'
 
@@ -25,6 +26,7 @@ function normalize(p: PullPage): PullPage {
     d.steps = (d.steps || []).map(s => ({ ...s, risks: s.risks || [], units: (s.units || []).map(u => ({ ...u, hashes: u.hashes || [] })) }))
     d.noise = d.noise || []; d.risks = (d.risks || []).map(r => ({ ...r, units: r.units || [] })); d.questions = d.questions || []; d.warnings = d.warnings || []
     d.flow = (d.flow || []).map(g => ({ ...g, items: g.items || [], steps: g.steps || [] })); d.terms = d.terms || []
+    if (d.diagram) d.diagram = { nodes: d.diagram.nodes || [], edges: d.diagram.edges || [] }
   }
   if (p.walkthrough) p.walkthrough.timeline = (p.walkthrough.timeline || []).map(e => ({ ...e, files: e.files || [] }))
   p.files = (p.files || []).map(f => ({ ...f, hunks: f.hunks || [] }))
@@ -200,7 +202,7 @@ export default function Pull() {
               <div className="walk-main">
                 {mobile && <Select ariaLabel="Step" value={stepKey} onChange={goStep} options={[{ value: OVERVIEW, label: 'In one minute' }, ...steps.map((s, i) => ({ value: s.key, label: `${i + 1}. ${s.title}${stepDone(s, viewed) ? ' ✓' : ''}` }))]} />}
                 {stepIdx < 0
-                  ? <Overview doc={doc} pull={page} viewed={viewed} onGo={goStep} onStart={() => steps[0] && goStep(steps[0].key)} onAsk={() => setModal('ask')} />
+                  ? <Overview doc={doc} pull={page} viewed={viewed} mobile={mobile} onGo={goStep} onStart={() => steps[0] && goStep(steps[0].key)} onAsk={() => setModal('ask')} />
                   : <StepView step={steps[stepIdx]} index={stepIdx} total={steps.length} files={files} viewed={viewed} comments={comments} threads={threads} actions={actions}
                       wrap={!!settings?.diff_wrap} onViewed={setViewed} onNote={addStepNote}
                       onPrev={() => goStep(stepIdx > 0 ? steps[stepIdx - 1].key : OVERVIEW)} onNext={markAndNext} last={stepIdx === steps.length - 1} onFinish={() => setModal('review')} onAsk={() => setModal('ask')} />}
@@ -261,7 +263,7 @@ function unitLines(u: Unit, f?: WFile) {
   return u.hunks.reduce((n, i) => n + (f.hunks[i]?.lines.filter(l => l.t === '+' || l.t === '-').length || 0), 0)
 }
 
-function Overview({ doc, pull, viewed, onGo, onStart, onAsk }: { doc: Doc; pull: PullPage; viewed: Viewed; onGo: (k: string) => void; onStart: () => void; onAsk: () => void }) {
+function Overview({ doc, pull, viewed, mobile, onGo, onStart, onAsk }: { doc: Doc; pull: PullPage; viewed: Viewed; mobile: boolean; onGo: (k: string) => void; onStart: () => void; onAsk: () => void }) {
   const [more, setMore] = useState(false)
   const files = useMemo(() => new Map(pull.files.map(f => [f.path, f])), [pull.files])
   const stepOfUnit = useMemo(() => {
@@ -292,7 +294,14 @@ function Overview({ doc, pull, viewed, onGo, onStart, onAsk }: { doc: Doc; pull:
         )}
       </section>
 
-      {flow.length > 0 && (
+      {doc.diagram && doc.diagram.nodes.length > 1 && (
+        <section className="ov-card">
+          <h3>How the data moves</h3>
+          <DataFlow diagram={doc.diagram} vertical={mobile} onStep={n => doc.steps[n - 1] && onGo(doc.steps[n - 1].key)} />
+        </section>
+      )}
+
+      {!doc.diagram && flow.length > 0 && (
         <section className="ov-card">
           <h3>How it fits together</h3>
           <div className="flow" role="list">
