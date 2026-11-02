@@ -58,7 +58,8 @@ type Doc struct {
 	Noise     []Unit   `json:"noise"`
 	Risks     []Risk   `json:"risks"`
 	Questions []string `json:"questions"`
-	Flow      []Stage  `json:"flow,omitempty"`  // how the pieces connect, left to right
+	Flow      []Stage  `json:"flow,omitempty"` // how the pieces connect, left to right
+	Diagram   *Diagram `json:"diagram,omitempty"`
 	Terms     []Term   `json:"terms,omitempty"` // words a newcomer needs
 	Order     string   `json:"order"`           // ai | layers: who decided the order
 	Warnings  []string `json:"warnings"`
@@ -91,6 +92,28 @@ type Stage struct {
 	Title string   `json:"title"`
 	Items []string `json:"items"`
 	Steps []int    `json:"steps"` // 1-based walkthrough steps it is about
+}
+
+// Diagram is how data moves through what the pull request adds: boxes and arrows.
+type Diagram struct {
+	Nodes []DNode `json:"nodes"`
+	Edges []DEdge `json:"edges"`
+}
+
+// DNode is one box: a person, an event, code, a table, a route, a screen.
+type DNode struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	Kind  string `json:"kind"` // actor | event | code | store | api | ui | external
+	New   bool   `json:"new"`  // this pull request adds it
+	Step  int    `json:"step"` // 1-based walkthrough step, 0 = none
+}
+
+// DEdge is one arrow and what moves along it.
+type DEdge struct {
+	From  string `json:"from"`
+	To    string `json:"to"`
+	Label string `json:"label"`
 }
 
 // Term is a word of the codebase explained for someone new to it.
@@ -451,11 +474,12 @@ Also write, for a reviewer who has never seen this codebase or this pull request
 - overview: 2 or 3 short sentences: the problem and the approach
 - before / after: how it behaves before and after, at most 20 words each
 - flow: a diagram of how the new pieces connect, 2 to 5 stages left to right (where it starts → what it goes through → where it ends up: e.g. triggers → logic → storage → API → screen). Each stage: title of 1 to 3 words, items of 1 to 4 short labels (at most 5 words each, concrete names), steps = the 1-based step numbers it is about
+- diagram: how data moves through what this pull request adds, as boxes and arrows — 4 to 10 nodes: where it starts (a person or an event), the code that handles it, where it is stored, how it is read back, where people see it. Each node: id, label of at most 4 words (a concrete name), kind (actor, event, code, store, api, ui or external), new (true when this pull request adds it, false for an existing piece it connects to), step (the 1-based step that has it, 0 when none). Edges: from, to, and a label of 1 to 4 words saying what moves ("+1 per use", "weekly totals"). Follow the data, not the files
 - terms: up to 5 words or names of this codebase a newcomer would not know, each explained in at most 12 words (empty when nothing needs explaining)
 - risks: the most important concerns across the pull request, each with level high, medium or low, a title of at most 8 words, text of at most 30 words, and the unit ids it is about
 - questions: up to 4 short things the reviewer should ask the author
 Every unit id must appear in exactly one step. Do not invent changes that are not in the units.
-Answer with JSON only: {"tldr":"…","overview":"…","before":"…","after":"…","flow":[{"title":"…","items":["…"],"steps":[1]}],"terms":[{"term":"…","means":"…"}],"steps":[{"title":"…","why":"…","units":["u1"],"risks":["…"]}],"risks":[{"level":"medium","title":"…","text":"…","units":["u3"]}],"questions":["…"]}`
+Answer with JSON only: {"tldr":"…","overview":"…","before":"…","after":"…","flow":[{"title":"…","items":["…"],"steps":[1]}],"diagram":{"nodes":[{"id":"a","label":"…","kind":"code","new":true,"step":2}],"edges":[{"from":"a","to":"b","label":"…"}]},"terms":[{"term":"…","means":"…"}],"steps":[{"title":"…","why":"…","units":["u1"],"risks":["…"]}],"risks":[{"level":"medium","title":"…","text":"…","units":["u3"]}],"questions":["…"]}`
 
 func plan(ctx context.Context, in Input, units []Unit, edges []Edge, ai AI, doc *Doc) error {
 	var sb strings.Builder
@@ -516,10 +540,11 @@ func plan(ctx context.Context, in Input, units []Unit, edges []Edge, ai AI, doc 
 			Items []string `json:"items"`
 			Steps []int    `json:"steps"`
 		} `json:"flow"`
-		Terms    []Term `json:"terms"`
-		Overview string `json:"overview"`
-		Before   string `json:"before"`
-		After    string `json:"after"`
+		Terms    []Term   `json:"terms"`
+		Diagram  *Diagram `json:"diagram"`
+		Overview string   `json:"overview"`
+		Before   string   `json:"before"`
+		After    string   `json:"after"`
 		Steps    []struct {
 			Title string   `json:"title"`
 			Why   string   `json:"why"`
@@ -624,6 +649,7 @@ func plan(ctx context.Context, in Input, units []Unit, edges []Edge, ai AI, doc 
 			doc.Flow = append(doc.Flow, g)
 		}
 	}
+	doc.Diagram = cleanDiagram(res.Diagram, len(steps))
 	for _, t := range res.Terms {
 		if t.Term, t.Means = oneLine(t.Term, 60), oneLine(t.Means, 200); t.Term != "" && t.Means != "" && len(doc.Terms) < 6 {
 			doc.Terms = append(doc.Terms, t)
@@ -652,6 +678,45 @@ func plan(ctx context.Context, in Input, units []Unit, edges []Edge, ai AI, doc 
 		}
 	}
 	return nil
+}
+
+// cleanDiagram keeps known kinds, unique ids and arrows between known boxes;
+// fewer than two boxes or no arrow is no diagram.
+func cleanDiagram(d *Diagram, steps int) *Diagram {
+	if d == nil {
+		return nil
+	}
+	kinds := map[string]bool{"actor": true, "event": true, "code": true, "store": true, "api": true, "ui": true, "external": true}
+	out := &Diagram{Nodes: []DNode{}, Edges: []DEdge{}}
+	seen := map[string]bool{}
+	for _, n := range d.Nodes {
+		n.ID, n.Label, n.Kind = oneLine(n.ID, 40), oneLine(n.Label, 60), strings.ToLower(strings.TrimSpace(n.Kind))
+		if n.ID == "" || n.Label == "" || seen[n.ID] || len(out.Nodes) >= 14 {
+			continue
+		}
+		if !kinds[n.Kind] {
+			n.Kind = "code"
+		}
+		if n.Step < 0 || n.Step > steps {
+			n.Step = 0
+		}
+		seen[n.ID] = true
+		out.Nodes = append(out.Nodes, n)
+	}
+	dup := map[string]bool{}
+	for _, e := range d.Edges {
+		e.From, e.To, e.Label = oneLine(e.From, 40), oneLine(e.To, 40), oneLine(e.Label, 40)
+		k := e.From + "\x00" + e.To
+		if !seen[e.From] || !seen[e.To] || e.From == e.To || dup[k] || len(out.Edges) >= 20 {
+			continue
+		}
+		dup[k] = true
+		out.Edges = append(out.Edges, e)
+	}
+	if len(out.Nodes) < 2 || len(out.Edges) == 0 {
+		return nil
+	}
+	return out
 }
 
 // ---- without the AI ----

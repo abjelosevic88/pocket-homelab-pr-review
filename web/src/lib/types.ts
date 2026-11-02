@@ -39,9 +39,12 @@ export interface Unit { id: string; path: string; hunks: number[] | null; hashes
 export interface Step { key: string; title: string; why: string; layer: string; risks: string[]; units: Unit[] }
 export interface Risk { level: 'high' | 'medium' | 'low'; title?: string; text: string; units: string[] }
 export interface Stage { title: string; items: string[]; steps: number[] }
+export interface DNode { id: string; label: string; kind: string; new: boolean; step: number }
+export interface DEdge { from: string; to: string; label: string }
+export interface Diagram { nodes: DNode[]; edges: DEdge[] }
 export interface Term { term: string; means: string }
 export interface Doc {
-  title: string; tldr?: string; overview: string; flow?: Stage[]; terms?: Term[]; before: string; after: string; steps: Step[]; noise: Unit[]; risks: Risk[]; questions: string[]
+  title: string; tldr?: string; overview: string; flow?: Stage[]; diagram?: Diagram; terms?: Term[]; before: string; after: string; steps: Step[]; noise: Unit[]; risks: Risk[]; questions: string[]
   order: 'ai' | 'layers'; warnings: string[]; stats: { steps: number; units: number; files: number; additions: number; deletions: number }
 }
 export interface TFile { path: string; status: string; additions: number; deletions: number; patch?: string; note?: string }

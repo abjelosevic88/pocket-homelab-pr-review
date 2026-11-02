@@ -48,7 +48,24 @@ func Markdown(d *Doc, prURL, title string, link func(path string) string) string
 	if d.Overview != "" {
 		fmt.Fprintf(&b, "**In one minute.** %s\n\n", d.Overview)
 	}
-	if len(d.Flow) > 0 {
+	if d.Diagram != nil {
+		b.WriteString("```mermaid\nflowchart LR\n")
+		for _, n := range d.Diagram.Nodes {
+			l := strings.ReplaceAll(n.Label, `"`, "'")
+			if n.New {
+				l += " ✦"
+			}
+			fmt.Fprintf(&b, "  n_%s[\"%s\"]\n", mermaidID(n.ID), l)
+		}
+		for _, e := range d.Diagram.Edges {
+			if e.Label != "" {
+				fmt.Fprintf(&b, "  n_%s -->|\"%s\"| n_%s\n", mermaidID(e.From), strings.ReplaceAll(e.Label, `"`, "'"), mermaidID(e.To))
+			} else {
+				fmt.Fprintf(&b, "  n_%s --> n_%s\n", mermaidID(e.From), mermaidID(e.To))
+			}
+		}
+		b.WriteString("```\n\n✦ added by this pull request\n\n")
+	} else if len(d.Flow) > 0 {
 		parts := make([]string, 0, len(d.Flow))
 		for _, st := range d.Flow {
 			p := "**" + st.Title + "**"
@@ -124,4 +141,17 @@ func riskMark(level string) string {
 		return "⚪"
 	}
 	return "🟠"
+}
+
+// mermaidID keeps letters, digits and underscores.
+func mermaidID(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r == '_' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('_')
+		}
+	}
+	return b.String()
 }
