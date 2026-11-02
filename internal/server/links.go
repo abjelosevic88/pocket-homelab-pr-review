@@ -34,6 +34,8 @@ var linkRoutes = []linkRoute{
 	{"GET", regexp.MustCompile(`^/api/v1/lookup$`), "prs:read prs:write"},
 	{"GET", regexp.MustCompile(`^/api/v1/pulls/\d+$`), "prs:read"},
 	{"GET", regexp.MustCompile(`^/api/v1/pulls/\d+/walkthrough(\.md)?$`), "prs:read"},
+	{"GET", regexp.MustCompile(`^/api/v1/pulls/find$`), "prs:read"},
+	{"GET", regexp.MustCompile(`^/api/v1/pulls/\d+/(brief|diff|grep)$`), "prs:read"},
 	{"POST", regexp.MustCompile(`^/api/v1/pulls$`), "prs:write"},
 	{"POST", regexp.MustCompile(`^/api/v1/pulls/\d+/walkthrough$`), "prs:write"},
 }

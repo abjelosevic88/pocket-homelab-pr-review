@@ -368,6 +368,8 @@ func TestLinkScopes(t *testing.T) {
 		{[]string{"prs:read", "prs:write"}, r("PUT", "/api/v1/settings"), false},
 		{[]string{"prs:read"}, r("GET", "/api/v1/day/2026-10-30"), true},
 		{nil, r("GET", "/api/v1/auth/me"), true},
+		{[]string{"prs:read"}, r("GET", "/api/v1/pulls/find"), true},
+		{[]string{"prs:read"}, r("GET", "/api/v1/pulls/3/grep"), true},
 	}
 	for _, c := range cases {
 		if got := linkAllows(c.scopes, c.req); got != c.ok {
@@ -446,4 +448,78 @@ func TestPickFromGitHub(t *testing.T) {
 	if code := tt.do(alice, "GET", "/github/pulls?repo=not%20a%20repo", nil, nil); code != 400 {
 		t.Fatalf("bad repo: %d", code)
 	}
+}
+
+// What an assistant reads: find a pull request, its brief without diffs,
+// one file's diff, and a search over every changed line.
+func TestAssistantReads(t *testing.T) {
+	dir := t.TempDir()
+	cfg := testConfig(dir)
+	cfg.DemoData, cfg.AuthMode = true, "none"
+	st := openTestStore(t, cfg)
+	s := New(cfg, st, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	if err := s.Bootstrap(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(s.Router())
+	defer ts.Close()
+	get := func(path string, want int) []byte {
+		t.Helper()
+		res, err := http.Get(ts.URL + "/api/v1" + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if res.StatusCode != want {
+			t.Fatalf("%s: %d, want %d: %s", path, res.StatusCode, want, b)
+		}
+		return b
+	}
+	var found struct {
+		Pulls []struct {
+			ID  int64  `json:"id"`
+			Ref string `json:"ref"`
+		} `json:"pulls"`
+	}
+	for _, q := range []string{"142", "%23142", "acme/shop%23142", "coupon"} {
+		found.Pulls = nil
+		_ = json.Unmarshal(get("/pulls/find?q="+q, 200), &found)
+		if len(found.Pulls) != 1 || found.Pulls[0].Ref != "acme/shop#142" {
+			t.Fatalf("find %q: %+v", q, found.Pulls)
+		}
+	}
+	id := itoa64(found.Pulls[0].ID)
+	brief := string(get("/pulls/"+id+"/brief", 200))
+	for _, want := range []string{`"tldr"`, `"diagram"`, `"steps"`, "internal/api/coupons.go", "Coupons: create"} {
+		if !strings.Contains(brief, want) {
+			t.Fatalf("brief lacks %q", want)
+		}
+	}
+	if strings.Contains(brief, "@@") {
+		t.Fatal("the brief carries diffs")
+	}
+	diff := string(get("/pulls/"+id+"/diff?path=coupons.go", 200))
+	if !strings.Contains(diff, "func (h *Handler) redeemCoupon") || !strings.HasPrefix(diff, "--- added: internal/api/coupons.go") {
+		t.Fatalf("diff:\n%.300s", diff)
+	}
+	get("/pulls/"+id+"/diff?path=nope.go", 404)
+	var g struct {
+		Matches []struct {
+			Path string `json:"path"`
+			Line int    `json:"line"`
+			Kind string `json:"kind"`
+		} `json:"matches"`
+		Total int `json:"total"`
+	}
+	_ = json.Unmarshal(get("/pulls/"+id+"/grep?q=redeemCoupon&side=added", 200), &g)
+	if g.Total == 0 || g.Matches[0].Kind != "added" || g.Matches[0].Line == 0 {
+		t.Fatalf("grep: %+v", g)
+	}
+	g.Matches, g.Total = nil, 0
+	_ = json.Unmarshal(get("/pulls/"+id+"/grep?q=log%5C.Printf&regex=1&side=removed", 200), &g)
+	if g.Total != 1 || g.Matches[0].Path != "internal/api/router.go" {
+		t.Fatalf("grep removed: %+v", g)
+	}
+	get("/pulls/"+id+"/grep?q=(&regex=1", 400)
 }
