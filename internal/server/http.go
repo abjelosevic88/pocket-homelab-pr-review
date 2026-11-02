@@ -93,6 +93,7 @@ func (s *Server) Router() http.Handler {
 			r.Get("/pulls/{id}/agent", s.handleAgentThreads)
 			r.Get("/pulls/{id}/agent/prompt", s.handleAgentPrompt)
 			r.Post("/pulls/{id}/agent", s.handleAgentSend)
+			r.Post("/pulls/{id}/chat", s.handleChatStart)
 
 			// AI
 			r.Get("/ai/status", s.handleAIStatus)

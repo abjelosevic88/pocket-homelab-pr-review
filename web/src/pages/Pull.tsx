@@ -15,6 +15,7 @@ import { AgentModal } from '../components/AgentModal'
 import { Select } from '../components/Select'
 import { DataFlow } from '../components/DataFlow'
 import { PullStatus } from '../components/PullStatus'
+import { AIDock, useAIDock } from '../components/AIDock'
 import { Empty, Loading, MenuButton, type MenuItem, Modal, Segmented, Spinner, copyText, errMsg, modalOpen, useIsMobile, useToast } from '../components/ui'
 import { WalkPill, reviewBadge } from './Inbox'
 
@@ -77,6 +78,10 @@ export default function Pull() {
     tabsRO.current.observe(el)
   }, [])
   const [page, setPage] = useState<PullPage | null>(null)
+  // Pocket AI on the right, as in Pocket Projects (tabs per conversation, kept per pull request)
+  const dock = useAIDock(page?.pull, mobile)
+  const dockRef = useRef(dock)
+  dockRef.current = dock
   const [err, setErr] = useState('')
   const [threads, setThreads] = useState<Thread[]>([])
   const [modal, setModal] = useState<'review' | 'agent' | 'ask' | 'warnings' | null>(null)
@@ -172,6 +177,7 @@ export default function Pull() {
         case 'c': e.preventDefault(); setModal('review'); break
         case 'a': if (doc) { e.preventDefault(); setModal('ask') } break
         case 'e': e.preventDefault(); setModal('agent'); break
+        case 'i': e.preventDefault(); dockRef.current.toggle(); break
       }
     }
     window.addEventListener('keydown', h)
@@ -214,6 +220,8 @@ export default function Pull() {
           {(page.github.connected || settings?.demo) && <PullStatus key={`${p.id}:${p.head_sha}`} pullId={p.id} base={p.base_ref} prUrl={p.url} />}
         </div>
         <div className="pr-head-actions">
+          <button type="button" className={`btn ${dock.open ? 'active' : ''}`} onClick={dock.toggle} disabled={dock.busy} title="Ask Pocket AI about this pull request (i)" aria-pressed={dock.open}>
+            {dock.busy ? <Spinner size={14} /> : <Icon name="sparkles" size={15} />}{!mobile && 'Pocket AI'}</button>
           <button type="button" className="btn primary" onClick={() => setModal('review')} title="Finish the review (c)"><Icon name="check" size={15} />{mobile ? 'Review' : 'Finish the review'}{drafts.length > 0 && <span className="badge">{drafts.length}</span>}</button>
           <MenuButton items={more} label="More" align="right" width={300}><Icon name="more" size={16} /></MenuButton>
         </div>
@@ -256,6 +264,7 @@ export default function Pull() {
         </>
       )}
 
+      <AIDock pull={p} dock={dock} mobile={mobile} />
       {modal === 'review' && <ReviewModal pull={p} drafts={drafts} canSend={page.github.connected} demo={!!settings?.demo} onClose={() => setModal(null)} onRemove={actions.onDelete}
         onSent={url => { setModal(null); toast(settings?.demo ? 'Review saved (the demo does not send it)' : 'Review sent to GitHub'); if (url) window.open(url, '_blank', 'noopener'); load(); loadThreads(true); announceChange() }} />}
       {modal === 'agent' && <AgentModal pull={p} onClose={() => setModal(null)} />}
