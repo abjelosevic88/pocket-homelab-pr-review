@@ -43,6 +43,11 @@ const stepDone = (s: Step, viewed: Viewed) => s.units.length > 0 && s.units.ever
 const TEST_PATH = /(^|\/)(__tests__|tests?|spec|e2e)\/|[._-](test|spec)\.[a-z0-9]+$|_test\.go$|(^|\/)test_[^/]+\.py$/i
 const isTest = (u: Unit) => u.layer === 'tests' || TEST_PATH.test(u.path)
 
+/** ⌘ on a Mac, Ctrl elsewhere: held, a click anywhere on a file marks it as looked at. */
+const MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+const modKey = MAC ? '⌘' : 'Ctrl'
+const modDown = (e: { metaKey: boolean; ctrlKey: boolean }) => MAC ? e.metaKey : e.ctrlKey
+
 const LAYER_LABEL: Record<string, string> = { schema: 'database', model: 'model', data: 'data access', logic: 'logic', api: 'API', config: 'config', ui: 'UI', tests: 'tests', docs: 'docs', build: 'build', noise: 'generated' }
 
 export default function Pull() {
@@ -51,6 +56,16 @@ export default function Pull() {
   const { settings } = useApp()
   const { toast } = useToast()
   const mobile = useIsMobile()
+  // holding the modifier shows which file a click would mark (CSS: .mod-held)
+  useEffect(() => {
+    const root = document.documentElement
+    const set = (on: boolean) => root.classList.toggle('mod-held', on)
+    const key = (e: KeyboardEvent) => set(modDown(e))
+    const move = (e: MouseEvent) => set(modDown(e))
+    const off = () => set(false)
+    window.addEventListener('keydown', key); window.addEventListener('keyup', key); window.addEventListener('mousemove', move, { passive: true }); window.addEventListener('blur', off)
+    return () => { window.removeEventListener('keydown', key); window.removeEventListener('keyup', key); window.removeEventListener('mousemove', move); window.removeEventListener('blur', off); off() }
+  }, [])
   // the tabs stick to the top; a file's header sticks right under them
   const [tabsH, setTabsH] = useState(0)
   const tabsRO = useRef<ResizeObserver | null>(null)
@@ -453,7 +468,13 @@ function UnitView({ u, file, viewed, comments, threads, actions, wrap, onViewed 
   useEffect(() => { if (done) setOpen(false) }, [done])
   const parts = file ? file.hunks.length : 0
   return (
-    <section className={`unit ${done ? 'done' : ''}`}>
+    <section className={`unit ${done ? 'done' : ''}`} data-hint={`${modKey} Click to ${done ? 'unmark' : 'mark as looked at'}`}
+      onClickCapture={e => {
+        if (!modDown(e) || (e.target as HTMLElement).closest('a')) return
+        e.preventDefault(); e.stopPropagation()
+        window.getSelection()?.removeAllRanges()
+        onViewed([u], !done)
+      }}>
       <div className="unit-head">
         <button type="button" className="unit-toggle" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-label={open ? 'Fold' : 'Unfold'}><Icon name={open ? 'chevron-down' : 'chevron-right'} size={15} /></button>
         <div className="unit-title">
