@@ -287,3 +287,80 @@ func (c *Client) graphqlURL() string {
 	}
 	return c.Base + "/graphql"
 }
+
+// ThreadState is whether a review conversation is resolved, keyed by the
+// REST id of its first comment (GraphQL's databaseId).
+type ThreadState struct {
+	Resolved   bool   `json:"resolved"`
+	ResolvedBy string `json:"resolved_by"`
+}
+
+const threadsQuery = `query($owner:String!,$name:String!,$number:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$number){
+reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{isResolved resolvedBy{login} comments(first:1){nodes{databaseId}}}}}}}`
+
+// ThreadStates reads which review conversations are resolved (the REST API
+// does not say). Up to 1,000 conversations.
+func (c *Client) ThreadStates(ctx context.Context, repo string, n int) (map[int64]ThreadState, error) {
+	owner, name, ok := strings.Cut(repo, "/")
+	if !ok {
+		return nil, fmt.Errorf("repository %q is not owner/name", repo)
+	}
+	out := map[int64]ThreadState{}
+	var after any
+	for page := 0; page < 10; page++ {
+		var res struct {
+			Data struct {
+				Repository *struct {
+					PullRequest *struct {
+						ReviewThreads struct {
+							PageInfo struct {
+								HasNextPage bool   `json:"hasNextPage"`
+								EndCursor   string `json:"endCursor"`
+							} `json:"pageInfo"`
+							Nodes []struct {
+								IsResolved bool `json:"isResolved"`
+								ResolvedBy *struct {
+									Login string `json:"login"`
+								} `json:"resolvedBy"`
+								Comments struct {
+									Nodes []struct {
+										DatabaseID int64 `json:"databaseId"`
+									} `json:"nodes"`
+								} `json:"comments"`
+							} `json:"nodes"`
+						} `json:"reviewThreads"`
+					} `json:"pullRequest"`
+				} `json:"repository"`
+			} `json:"data"`
+			Errors []struct {
+				Message string `json:"message"`
+			} `json:"errors"`
+		}
+		body := map[string]any{"query": threadsQuery, "variables": map[string]any{"owner": owner, "name": name, "number": n, "after": after}}
+		if _, err := c.do(ctx, http.MethodPost, c.graphqlURL(), body, &res); err != nil {
+			return out, err
+		}
+		if res.Data.Repository == nil || res.Data.Repository.PullRequest == nil {
+			if len(res.Errors) > 0 {
+				return out, fmt.Errorf("GitHub: %s", res.Errors[0].Message)
+			}
+			return out, fmt.Errorf("GitHub has no pull request %s#%d", repo, n)
+		}
+		rt := res.Data.Repository.PullRequest.ReviewThreads
+		for _, t := range rt.Nodes {
+			if len(t.Comments.Nodes) == 0 {
+				continue
+			}
+			ts := ThreadState{Resolved: t.IsResolved}
+			if t.ResolvedBy != nil {
+				ts.ResolvedBy = t.ResolvedBy.Login
+			}
+			out[t.Comments.Nodes[0].DatabaseID] = ts
+		}
+		if !rt.PageInfo.HasNextPage {
+			break
+		}
+		after = rt.PageInfo.EndCursor
+	}
+	return out, nil
+}

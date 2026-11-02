@@ -81,3 +81,26 @@ func TestPullStatusPartial(t *testing.T) {
 		t.Fatalf("%+v", st)
 	}
 }
+
+func TestThreadStates(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		calls++
+		if calls == 1 {
+			_, _ = w.Write([]byte(`{"data":{"repository":{"pullRequest":{"reviewThreads":{"pageInfo":{"hasNextPage":true,"endCursor":"c1"},"nodes":[
+{"isResolved":true,"resolvedBy":{"login":"ann"},"comments":{"nodes":[{"databaseId":11}]}},{"isResolved":false,"resolvedBy":null,"comments":{"nodes":[{"databaseId":12}]}}]}}}}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"data":{"repository":{"pullRequest":{"reviewThreads":{"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[
+{"isResolved":true,"resolvedBy":null,"comments":{"nodes":[{"databaseId":13}]}}]}}}}}`))
+	}))
+	defer srv.Close()
+	m, err := New(srv.URL, "t", "", 0).ThreadStates(t.Context(), "o/r", 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 || len(m) != 3 || !m[11].Resolved || m[11].ResolvedBy != "ann" || m[12].Resolved || !m[13].Resolved {
+		t.Fatalf("%d calls: %+v", calls, m)
+	}
+}

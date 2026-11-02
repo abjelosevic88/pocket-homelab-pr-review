@@ -703,12 +703,13 @@ func demoThreads(p *store.Pull) []thread {
 	}
 	at := time.Now().Add(-90 * time.Minute).UTC().Format(time.RFC3339)
 	line := func(n int) *int { return &n }
+	yes, no := true, false
 	return []thread{
-		{ID: 501, Path: "internal/coupons/repository.go", Line: 19, Side: "RIGHT", URL: p.URL + "#discussion_r501", Comments: []github.LineComment{
+		{ID: 501, Path: "internal/coupons/repository.go", Line: 19, Side: "RIGHT", URL: p.URL + "#discussion_r501", Resolved: &yes, ResolvedBy: "sara-k", Comments: []github.LineComment{
 			{ID: 501, Path: "internal/coupons/repository.go", Line: line(19), Side: "RIGHT", Body: "Nice — one UPDATE with the condition means no race on the last use.", User: github.User{Login: "dino"}, CreatedAt: at},
 			{ID: 502, InReplyTo: 501, Path: "internal/coupons/repository.go", Line: line(19), Side: "RIGHT", Body: "Thanks! That was the point of doing it in SQL.", User: github.User{Login: "sara-k"}, CreatedAt: at},
 		}},
-		{ID: 504, Path: "internal/coupons/service.go", Line: 12, Side: "RIGHT", URL: p.URL + "#discussion_r504", Comments: []github.LineComment{
+		{ID: 504, Path: "internal/coupons/service.go", Line: 12, Side: "RIGHT", URL: p.URL + "#discussion_r504", Resolved: &no, Comments: []github.LineComment{
 			{ID: 504, Path: "internal/coupons/service.go", Line: line(12), Side: "RIGHT", Body: demoBotComment, User: github.User{Login: "coderabbitai[bot]"}, CreatedAt: at},
 		}},
 		{ID: 503, Path: "web/src/pages/admin/Coupons.tsx", Line: 25, Side: "RIGHT", URL: p.URL + "#discussion_r503", Comments: []github.LineComment{

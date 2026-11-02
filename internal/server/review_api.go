@@ -121,6 +121,9 @@ type thread struct {
 	Outdated bool                 `json:"outdated"`
 	URL      string               `json:"url"`
 	Comments []github.LineComment `json:"comments"`
+	// Resolved is nil when GitHub did not say (the token cannot read it)
+	Resolved   *bool  `json:"resolved"`
+	ResolvedBy string `json:"resolved_by,omitempty"`
 }
 
 // handleThreads lists the pull request's line comments on GitHub, as threads.
@@ -142,7 +145,7 @@ func (s *Server) handleThreads(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"threads": []thread{}, "error": err.Error()})
 		return
 	}
-	key := fmt.Sprintf("threads2:%d:%d", uid, p.ID) // 2: with body_html
+	key := fmt.Sprintf("threads3:%d:%d", uid, p.ID) // 3: with body_html and resolved
 	if v, at, ok := s.store.CacheGet(ctx, key); ok && !queryBool(r, "fresh") {
 		if t, err := time.Parse(time.RFC3339Nano, at); err == nil && time.Since(t) < 30*time.Second {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -155,7 +158,18 @@ func (s *Server) handleThreads(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"threads": []thread{}, "error": err.Error()})
 		return
 	}
-	b, _ := json.Marshal(map[string]any{"threads": threads(list)})
+	ts := threads(list)
+	if states, err := gh.ThreadStates(ctx, p.Repo, p.Number); err == nil {
+		for i := range ts {
+			if st, ok := states[ts[i].ID]; ok {
+				r := st.Resolved
+				ts[i].Resolved, ts[i].ResolvedBy = &r, st.ResolvedBy
+			}
+		}
+	} else {
+		s.log.Debug("thread states", "pull", p.ID, "err", err)
+	}
+	b, _ := json.Marshal(map[string]any{"threads": ts})
 	_ = s.store.CachePut(ctx, key, string(b))
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, _ = w.Write(b)

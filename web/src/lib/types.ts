@@ -60,7 +60,7 @@ export interface Review { id: number; pull_id: number; event: 'APPROVE' | 'REQUE
 export interface WalkVersion { id: number; head_sha: string; status: WalkStatus; ai: string; created_at: string; finished_at: string }
 
 export interface GHComment { id: number; in_reply_to_id: number; path: string; line: number | null; side: string; body: string; body_html?: string; user: { login: string; avatar_url: string }; html_url: string; created_at: string }
-export interface Thread { id: number; path: string; line: number; side: string; outdated: boolean; url: string; comments: GHComment[] }
+export interface Thread { id: number; path: string; line: number; side: string; outdated: boolean; url: string; comments: GHComment[]; resolved?: boolean | null; resolved_by?: string }
 
 export type Viewed = Record<string, Record<string, string>>
 
