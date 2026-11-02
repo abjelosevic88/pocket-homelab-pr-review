@@ -259,7 +259,7 @@
 .diff.wrap .ds { width: 18px; }
 .dn:hover { color: var(--accent-ink); }
 .ds { width: 1%; padding: 0 4px 0 2px !important; color: var(--muted); user-select: none; }
-.dc { white-space: pre; padding-right: 16px !important; position: relative; tab-size: 4; }
+.dc { white-space: pre; padding-right: 16px !important; position: relative; tab-size: 4; color: var(--text); }
 .diff.wrap .dc { white-space: pre-wrap; overflow-wrap: anywhere; }
 .dl.add td { background: var(--add-bg); } .dl.add .dn { background: var(--add-num); }
 .dl.del td { background: var(--del-bg); } .dl.del .dn { background: var(--del-num); }
@@ -405,3 +405,28 @@
 .df-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .df-key { width: 18px; height: 11px; border-radius: 3px; display: inline-block; border: 1.6px solid var(--accent); background: var(--surface); }
 .df-key.old { border: 1.2px dashed var(--border-strong, #b6bcc6); background: var(--surface-2); }
+/* syntax colours in diffs (GitHub's palette) */
+.dc .hljs-keyword, .dc .hljs-meta .hljs-keyword, .dc .hljs-doctag, .dc .hljs-template-tag, .dc .hljs-template-variable, .dc .hljs-type, .dc .hljs-variable.language_ { color: #cf222e; }
+.dc .hljs-title, .dc .hljs-title.class_, .dc .hljs-title.function_ { color: #8250df; }
+.dc .hljs-attr, .dc .hljs-attribute, .dc .hljs-literal, .dc .hljs-meta, .dc .hljs-number, .dc .hljs-operator, .dc .hljs-variable, .dc .hljs-selector-attr, .dc .hljs-selector-class, .dc .hljs-selector-id { color: #0550ae; }
+.dc .hljs-regexp, .dc .hljs-string, .dc .hljs-meta .hljs-string { color: #0a3069; }
+.dc .hljs-built_in, .dc .hljs-symbol { color: #953800; }
+.dc .hljs-comment, .dc .hljs-code, .dc .hljs-formula { color: #6e7781; font-style: italic; }
+.dc .hljs-name, .dc .hljs-quote, .dc .hljs-selector-tag, .dc .hljs-selector-pseudo { color: #116329; }
+.dc .hljs-subst { color: inherit; }
+.dc .hljs-section { color: #0550ae; font-weight: 600; }
+.dc .hljs-bullet { color: #953800; }
+.dc .hljs-emphasis { font-style: italic; }
+.dc .hljs-strong { font-weight: 600; }
+.dc .hljs-addition { color: #116329; } .dc .hljs-deletion { color: #82071e; }
+[data-theme="dark"] .dc .hljs-keyword, [data-theme="dark"] .dc .hljs-meta .hljs-keyword, [data-theme="dark"] .dc .hljs-doctag, [data-theme="dark"] .dc .hljs-template-tag, [data-theme="dark"] .dc .hljs-template-variable, [data-theme="dark"] .dc .hljs-type, [data-theme="dark"] .dc .hljs-variable.language_ { color: #ff7b72; }
+[data-theme="dark"] .dc .hljs-title, [data-theme="dark"] .dc .hljs-title.class_, [data-theme="dark"] .dc .hljs-title.function_ { color: #d2a8ff; }
+[data-theme="dark"] .dc .hljs-attr, [data-theme="dark"] .dc .hljs-attribute, [data-theme="dark"] .dc .hljs-literal, [data-theme="dark"] .dc .hljs-meta, [data-theme="dark"] .dc .hljs-number, [data-theme="dark"] .dc .hljs-operator, [data-theme="dark"] .dc .hljs-variable, [data-theme="dark"] .dc .hljs-selector-attr, [data-theme="dark"] .dc .hljs-selector-class, [data-theme="dark"] .dc .hljs-selector-id, [data-theme="dark"] .dc .hljs-section { color: #79c0ff; }
+[data-theme="dark"] .dc .hljs-regexp, [data-theme="dark"] .dc .hljs-string, [data-theme="dark"] .dc .hljs-meta .hljs-string { color: #a5d6ff; }
+[data-theme="dark"] .dc .hljs-built_in, [data-theme="dark"] .dc .hljs-symbol, [data-theme="dark"] .dc .hljs-bullet { color: #ffa657; }
+[data-theme="dark"] .dc .hljs-comment, [data-theme="dark"] .dc .hljs-code, [data-theme="dark"] .dc .hljs-formula { color: #8b949e; }
+[data-theme="dark"] .dc .hljs-name, [data-theme="dark"] .dc .hljs-quote, [data-theme="dark"] .dc .hljs-selector-tag, [data-theme="dark"] .dc .hljs-selector-pseudo, [data-theme="dark"] .dc .hljs-addition { color: #7ee787; }
+[data-theme="dark"] .dc .hljs-deletion { color: #ffdcd7; }
+/* a whole new file in solid green is hard to read: lighter, as GitHub does */
+:root { --add-bg: #f0fbf2; --add-num: #d8f5de; }
+[data-theme="dark"] { --add-bg: rgba(46, 160, 67, .10); --add-num: rgba(46, 160, 67, .22); }

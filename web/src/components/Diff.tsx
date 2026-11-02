@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react'
 import type { Comment, Hunk, Thread } from '../lib/types'
 import { wordMarks } from '../lib/diff'
+import { highlightHunk, languageOf, withMark, type Token } from '../lib/highlight'
 import { ago } from '../lib/format'
 import { Icon } from './icons'
 import { errMsg, useToast } from './ui'
@@ -31,6 +32,8 @@ export function Diff({ path, hunks, only, comments, threads, actions, wrap }: {
     for (const t of threads) if (t.path === path && t.line && !t.outdated) at(`${t.side || 'RIGHT'}:${t.line}`).gh.push(t)
     return m
   }, [comments, threads, path])
+  const lang = languageOf(path)
+  const colours = useMemo(() => new Map(shown.map(({ h, i }) => [i, highlightHunk(h.lines, lang)])), [hunks, only, lang]) // eslint-disable-line react-hooks/exhaustive-deps
   if (shown.length === 0) return <div className="diff-empty muted small">No text changes to show.</div>
   const click = (a: Anchor, e: React.MouseEvent) => {
     if (!actions.canComment) return
@@ -53,6 +56,7 @@ export function Diff({ path, hunks, only, comments, threads, actions, wrap }: {
                 const isOpen = open && key(open) === key(a)
                 const inRange = from && open && from.side === a.side && a.line >= from.line && a.line <= open.line
                 const mk = marks.get(li)
+                const toks = colours.get(i)?.get(li)
                 return (
                   <React.Fragment key={li}>
                     <tr className={`dl ${l.t === '+' ? 'add' : l.t === '-' ? 'del' : ''} ${inRange || isOpen ? 'picked' : ''}`}>
@@ -61,7 +65,8 @@ export function Diff({ path, hunks, only, comments, threads, actions, wrap }: {
                       <td className="ds">{l.t === ' ' ? '' : l.t === '-' ? '−' : '+'}</td>
                       <td className="dc">
                         {actions.canComment && <button type="button" className="dl-add" aria-label="Comment on this line" onClick={e => click(a, e)}><Icon name="plus" size={12} strokeWidth={2.4} /></button>}
-                        {mk ? <>{l.s.slice(0, mk[0])}<mark>{l.s.slice(mk[0], mk[1])}</mark>{l.s.slice(mk[1])}</> : l.s || ' '}
+                        {toks && toks.length > 0 ? <Code toks={toks} mk={mk} />
+                          : mk ? <>{l.s.slice(0, mk[0])}<mark>{l.s.slice(mk[0], mk[1])}</mark>{l.s.slice(mk[1])}</> : l.s || ' '}
                       </td>
                     </tr>
                     {(here || isOpen) && (
@@ -81,6 +86,14 @@ export function Diff({ path, hunks, only, comments, threads, actions, wrap }: {
       })}
     </div>
   )
+}
+
+/** A line's coloured tokens, its changed words marked. */
+function Code({ toks, mk }: { toks: Token[]; mk?: [number, number] }) {
+  return <>{withMark(toks, mk).map((t, k) => {
+    const span = t.c ? <span key={k} className={t.c}>{t.s}</span> : t.s
+    return t.mark ? <mark key={k}>{span}</mark> : <React.Fragment key={k}>{span}</React.Fragment>
+  })}</>
 }
 
 export function Composer({ label, initial = '', onSave, onCancel, saveLabel = 'Add to the review' }: { label?: string; initial?: string; onSave: (body: string) => Promise<void>; onCancel: () => void; saveLabel?: string }) {
