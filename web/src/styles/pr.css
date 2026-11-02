@@ -167,7 +167,54 @@
 .ov-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; }
 .ov-card h3 { font-size: 15px; margin-bottom: 8px; }
 .ov-text { line-height: 1.6; margin: 0; white-space: pre-line; }
-.ba { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.ov-hero { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.ov-kicker { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent-ink); }
+.ov-tldr { margin: 0; font-size: 18px; font-weight: 600; line-height: 1.4; letter-spacing: -.01em; }
+.ov-hero .ov-text { font-size: 14px; }
+.ov-hero .ba { align-self: stretch; }
+.ba { display: grid; grid-template-columns: 1fr auto 1fr; align-items: stretch; gap: 8px; margin-top: 12px; }
+.ba-arrow { display: grid; place-items: center; color: var(--muted); }
+.ba-before { border-left: 3px solid var(--faint); }
+.ba-after { border-left: 3px solid var(--success); }
+/* how it fits together: stages left to right */
+.flow { display: flex; align-items: stretch; gap: 0; overflow-x: auto; padding-bottom: 2px; }
+.flow-cell { display: flex; align-items: center; flex: 1 1 0; min-width: 150px; }
+.flow-stage { flex: 1; align-self: stretch; display: flex; flex-direction: column; gap: 6px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+.flow-title { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-2); }
+.flow-items { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.flow-items li { font-size: 13px; line-height: 1.35; background: var(--surface); border: 1px solid var(--hairline, var(--border)); border-radius: 7px; padding: 4px 8px; }
+.flow-steps { display: flex; flex-wrap: wrap; gap: 4px; margin-top: auto; }
+.flow-step, .file-chip { font: inherit; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 6px; border: 0; background: var(--accent-soft); color: var(--accent-ink); cursor: pointer; }
+.flow-step:hover, .file-chip:hover { filter: brightness(.95); text-decoration: underline; }
+.flow-arrow { flex-shrink: 0; color: var(--muted); padding: 0 4px; display: grid; }
+/* the map of the steps */
+.map { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+.map-row { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) 90px; align-items: center; gap: 10px; padding: 7px 8px; border: 0; border-radius: 9px; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.map-row:hover { background: var(--hover); }
+.map-row.done .step-num { background: var(--success); color: #fff; }
+.map-row.done .map-title { color: var(--text-2); }
+.map-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.map-title { font-weight: 600; font-size: 14px; line-height: 1.35; }
+.map-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; }
+.map-risk { display: inline-flex; align-items: center; gap: 3px; color: var(--warning); }
+.map-size { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.map-size > span { display: block; height: 100%; border-radius: 3px; background: var(--accent); opacity: .75; }
+.map-size > .l-schema, .map-size > .l-model, .map-size > .l-data { background: #8250df; }
+.map-size > .l-logic { background: #0969da; }
+.map-size > .l-api, .map-size > .l-config { background: #bf8700; }
+.map-size > .l-ui { background: #1a7f37; }
+.map-size > .l-tests, .map-size > .l-docs, .map-size > .l-build, .map-size > .l-noise { background: var(--faint); }
+/* risks */
+.risk-lvl { flex-shrink: 0; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 1px 6px; border-radius: 6px; margin-top: 2px; background: var(--warning-soft); color: var(--warning); min-width: 54px; text-align: center; }
+.risk-lvl.high { background: var(--danger-soft, #fde8e8); color: var(--danger); }
+.risk-lvl.low { background: var(--surface-2); color: var(--muted); }
+.risk-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.risk-files { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.file-chip { font-family: var(--code); font-weight: 500; background: var(--surface-2); color: var(--text-2); }
+/* glossary */
+.terms { margin: 0; display: grid; gap: 6px; }
+.terms > div { display: grid; grid-template-columns: minmax(110px, 30%) 1fr; gap: 12px; font-size: 13.5px; line-height: 1.45; }
+.terms dd { margin: 0; color: var(--text-2); }
 .ba > div { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; }
 .ba p { margin: 4px 0 0; line-height: 1.5; font-size: 13.5px; }
 .ba-l { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
@@ -280,6 +327,13 @@
   .pr-head-actions .btn.primary { flex: 1; justify-content: center; }
   .pr-h-title { font-size: 18px; }
   .ba { grid-template-columns: 1fr; }
+  .ba-arrow { transform: rotate(90deg); }
+  .flow { flex-direction: column; overflow: visible; }
+  .flow-cell { flex-direction: column; min-width: 0; align-items: stretch; }
+  .flow-arrow { transform: rotate(90deg); justify-self: center; align-self: center; padding: 2px 0; }
+  .map-row { grid-template-columns: auto minmax(0, 1fr) 48px; }
+  .terms > div { grid-template-columns: 1fr; gap: 2px; }
+  .ov-tldr { font-size: 16.5px; }
   .diff { font-size: 11.5px; }
   .dn { min-width: 30px; padding: 0 4px !important; }
   .step-foot { position: sticky; bottom: 0; background: var(--bg); padding: 10px 0 calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); z-index: 4; }
@@ -313,3 +367,10 @@
 .search-box { position: relative; min-width: 0; }
 .search-box .icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
 .search-box input { padding-left: 32px; }
+/* the overview's wide pieces must not push the column past the page */
+.walk-main, .walk-main > .stack, .ov-card { min-width: 0; }
+.flow-cell { min-width: 132px; }
+.flow-stage { min-width: 0; }
+.flow-items li { overflow-wrap: break-word; hyphens: auto; }
+.terms > div { grid-template-columns: minmax(90px, max-content) 1fr; }
+@media (max-width: 767px) { .terms > div { grid-template-columns: 1fr; } }
