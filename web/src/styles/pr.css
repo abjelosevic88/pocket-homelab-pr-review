@@ -512,10 +512,17 @@ button.ghs-chip:not(:disabled):hover, a.ghs-chip:hover { background: var(--hover
 .viewed-box { height: 40px; padding: 0 16px 0 12px; gap: 9px; font-size: 14px; font-weight: 600; border-radius: 10px; border-width: 1.5px; color: var(--text); flex-shrink: 0; user-select: none; transition: background .12s, border-color .12s; }
 .viewed-box:hover { border-color: var(--accent); background: var(--accent-soft); }
 .viewed-box input { width: 19px; height: 19px; accent-color: var(--success); cursor: pointer; }
-.viewed-box:has(input:checked) { background: var(--success); border-color: var(--success); color: #fff; }
-.viewed-box:has(input:checked):hover { filter: brightness(1.06); }
+.viewed-box:has(input:checked) { background: var(--success-soft); border-color: color-mix(in srgb, var(--success) 45%, var(--border)); color: var(--success); }
+.viewed-box:has(input:checked):hover { border-color: var(--success); }
 .viewed-box:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 .unit-head { align-items: center; }
 .unit-head > .unit-toggle { align-self: flex-start; margin-top: 2px; }
 @media (max-width: 767px) { .viewed-box { height: 44px; min-width: 44px; padding: 0 12px; justify-content: center; } }
-.viewed-box:has(input:checked) input { accent-color: #fff; }
+/* hold ⌘ (Ctrl): the file under the pointer can be marked with a click anywhere on it */
+.unit { position: relative; }
+.mod-held .unit:hover { cursor: pointer; outline: 2px solid var(--accent); outline-offset: 2px; }
+.mod-held .unit:hover::before { content: ""; position: absolute; inset: 0; z-index: 6; pointer-events: none; border-radius: inherit; background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.mod-held .unit.done:hover { outline-color: var(--success); }
+.mod-held .unit:hover::after { content: attr(data-hint); position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 80; pointer-events: none;
+  padding: 9px 16px; border-radius: 999px; background: var(--text); color: var(--bg); font-size: 13.5px; font-weight: 600; white-space: nowrap; box-shadow: var(--shadow-lg); }
+.mod-held .unit:hover * { cursor: pointer; }
