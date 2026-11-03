@@ -580,3 +580,9 @@ button.ghs-chip:not(:disabled):hover, a.ghs-chip:hover { background: var(--hover
 .cv-sub b.running { color: #7c3aed; } [data-theme="dark"] .cv-sub b.running { color: #b794f6; }
 .cv-sub b.waiting { color: var(--warning); } .cv-sub b.error { color: var(--danger); }
 .walk-main > .cv { margin: 0 0 4px; padding: 10px 0 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+/* a long conversation title ends in … instead of widening the steps column */
+.cv-list { grid-template-columns: minmax(0, 1fr); }
+.cv-row, .cv-main { min-width: 0; }
+.cv-main { flex: 1; }
+.cv-title { display: block; }
+.step-list { overflow-x: hidden; min-width: 0; }
