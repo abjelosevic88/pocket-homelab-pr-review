@@ -185,7 +185,7 @@
 .flow-items li { font-size: 13px; line-height: 1.35; background: var(--surface); border: 1px solid var(--hairline, var(--border)); border-radius: 7px; padding: 4px 8px; }
 .flow-steps { display: flex; flex-wrap: wrap; gap: 4px; margin-top: auto; }
 .flow-step, .file-chip { font: inherit; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 6px; border: 0; background: var(--accent-soft); color: var(--accent-ink); cursor: pointer; }
-.flow-step:hover, .file-chip:hover { filter: brightness(.95); text-decoration: underline; }
+.flow-step:hover, .file-chip:hover { filter: brightness(.95); }
 .flow-arrow { flex-shrink: 0; color: var(--muted); padding: 0 4px; display: grid; }
 /* the map of the steps */
 .map { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
@@ -491,7 +491,6 @@ button.ghs-chip:not(:disabled):hover, a.ghs-chip:hover { background: var(--hover
 .ghs-checks { list-style: none; margin: 0; padding: 6px; display: grid; gap: 1px; max-width: 620px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); max-height: 320px; overflow-y: auto; }
 .ghs-checks li { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; font-size: 13px; min-width: 0; }
 .ghs-checks li > a, .ghs-checks li > span:first-of-type { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
-.ghs-checks li > a:hover { text-decoration: underline; }
 .ghs-checks li.passed .icon { color: var(--success); } .ghs-checks li.failed .icon { color: var(--danger); }
 .ghs-checks li.running .icon { color: var(--warning); } .ghs-checks li.skipped .icon { color: var(--faint); }
 .ghs-checks li.failed { background: var(--danger-soft); }
