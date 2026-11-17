@@ -12,6 +12,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import Login from './pages/Login'
 import Inbox from './pages/Inbox'
 import Pull from './pages/Pull'
+import StackReview from './pages/StackReview'
 import Reviews from './pages/Reviews'
 import Settings from './pages/Settings'
 
@@ -38,6 +39,7 @@ function App() {
         <Route path="/archived" element={<Inbox view="archived" />} />
         <Route path="/repo/:owner/:name" element={<Inbox view="repo" />} />
         <Route path="/pr/:id" element={<Pull />} />
+        <Route path="/pr/:id/stack" element={<StackReview />} />
         <Route path="/reviews" element={<Reviews />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

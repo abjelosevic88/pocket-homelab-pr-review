@@ -15,7 +15,7 @@ import { AgentModal } from '../components/AgentModal'
 import { Select } from '../components/Select'
 import { DataFlow } from '../components/DataFlow'
 import { PullStatus } from '../components/PullStatus'
-import { StackBar } from '../components/StackBar'
+import { StackBar, StackContext, useOpenMember, useStack, useStackInfo } from '../components/StackBar'
 import { AIDock, Conversations, useAIDock } from '../components/AIDock'
 import { AIMark } from '../components/AIMark'
 import { Empty, Loading, MenuButton, type MenuItem, Modal, Segmented, Spinner, copyText, errMsg, modalOpen, useIsMobile, useToast } from '../components/ui'
@@ -113,6 +113,7 @@ export default function Pull() {
   const [threads, setThreads] = useState<Thread[]>([])
   const [modal, setModal] = useState<'review' | 'agent' | 'ask' | 'warnings' | null>(null)
   const [hideTrusted, setHideTrusted] = useHideTrusted()
+  const stackInfo = useStack(page?.pull.id, !!page?.github.connected && !settings?.demo)
   const v = sp.get('v')
   const load = useCallback(async () => {
     try { setPage(normalize(await api.get<PullPage>(`${V1}/pulls/${id}${v ? `?v=${v}` : ''}`))); setErr('') } catch (e) { setErr(errMsg(e)) }
@@ -250,6 +251,7 @@ export default function Pull() {
   ]
 
   return (
+    <StackContext.Provider value={stackInfo}>
     <div className="pr-page" style={{ '--tabs-h': `${tabsH}px` } as React.CSSProperties}>
       <header className="pr-head">
         <div className="pr-head-main">
@@ -263,7 +265,7 @@ export default function Pull() {
             {reviewBadge(p)}
           </div>
           {(page.github.connected || settings?.demo) && <PullStatus key={`${p.id}:${p.head_sha}`} pullId={p.id} base={p.base_ref} prUrl={p.url} />}
-          {page.github.connected && !settings?.demo && <StackBar key={p.id} pullId={p.id} />}
+          <StackBar pullId={p.id} stack={stackInfo.stack} />
         </div>
         <div className="pr-head-actions">
           <button type="button" className={`btn ${dock.open ? 'active' : ''}`} onClick={dock.toggle} disabled={dock.busy} title="Ask Pocket AI about this pull request (i)" aria-pressed={dock.open}>
@@ -322,6 +324,7 @@ export default function Pull() {
       {modal === 'ask' && doc && <AskModal pullId={p.id} step={stepIdx >= 0 ? steps[stepIdx] : undefined} onClose={() => setModal(null)} />}
       {modal === 'warnings' && doc && <Modal title="Notes on this walkthrough" onClose={() => setModal(null)}><ul className="warn-list">{doc.warnings.map((x, i) => <li key={i}>{x}</li>)}</ul></Modal>}
     </div>
+    </StackContext.Provider>
   )
 }
 
@@ -512,6 +515,10 @@ function StepView({ step, index, total, chapter, chapterNo, chapters, hideTruste
   const [noting, setNoting] = useState(false)
   const notes = comments.filter(c => !c.path && c.step === step.title)
   const done = stepDone(step, viewed)
+  const { stack } = useStackInfo()
+  const { open: openMember, busy: opening } = useOpenMember()
+  const at = stack ? stack.items.findIndex(x => x.here) : -1
+  const nextInStack = stack && at >= 0 ? stack.items.slice(at + 1).find(x => x.state === 'open') : undefined
   const trusted = step.units.filter(isTrust)
   const trustedLeft = trusted.filter(u => u.hashes.length > 0 && !unitDone(u, viewed)).length
   const top = useRef<HTMLDivElement>(null)
@@ -542,6 +549,7 @@ function StepView({ step, index, total, chapter, chapterNo, chapters, hideTruste
       <div className="step-foot">
         <button type="button" className="btn" onClick={onPrev}><Icon name="chevron-left" size={15} />{index === 0 ? 'Overview' : 'Previous'}</button>
         <span className="spacer" />
+        {last && nextInStack && <button type="button" className="btn" onClick={() => openMember(nextInStack)} disabled={opening === nextInStack.number} title={nextInStack.title}><Icon name="layers" size={14} />Next in the stack: #{nextInStack.number}</button>}
         {last && done
           ? <button type="button" className="btn primary" onClick={onFinish}><Icon name="check" size={15} />Finish the review</button>
           : <button type="button" className="btn primary" onClick={onNext} title="Mark as looked at, then the next step (v)">{done ? 'Next step' : last ? 'Looked at' : 'Looked at — next step'}<Icon name="chevron-right" size={15} /></button>}
@@ -564,6 +572,7 @@ function UnitView({ u, file, viewed, comments, threads, actions, wrap, onViewed,
     try { const r = await api.get<{ hunks: Hunk[] }>(hunksUrl + encodeURIComponent(u.path)); setLazy({ hunks: r.hunks || [] }) } catch (e) { setLazy({ err: errMsg(e) }) }
   }
   const hunks = file?.lazy ? lazy.hunks : file?.hunks
+  const laterIn = useStackInfo().later[u.path]
   useEffect(() => { if (done) setOpen(false) }, [done])
   const parts = hunks ? hunks.length : 0
   return (
@@ -585,6 +594,7 @@ function UnitView({ u, file, viewed, comments, threads, actions, wrap, onViewed,
             {u.hunks && parts > 1 && <span className="badge sm" title="Only the part of this file that belongs to this step">part: {u.hunks.length} of {parts} changes</span>}
             {file && <span className="tnum small"><span className="add">+{file.additions}</span> <span className="del">−{file.deletions}</span></span>}
             {changed && <span className="badge warn sm">changed since you looked</span>}
+            {laterIn && laterIn.length > 0 && <span className="badge sm later-chip" title="A pull request higher up the stack changes this file again: check the idea here, the details there">changed again in {laterIn.map(n => `#${n}`).join(', ')}</span>}
           </span>
           <p className="unit-sum">{u.summary}</p>
         </div>

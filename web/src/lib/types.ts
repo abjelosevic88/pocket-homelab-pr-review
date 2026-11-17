@@ -81,5 +81,11 @@ export interface PullPage {
 
 export interface Dashboard { waiting: number; open: number; mine: number; walkthroughs_to_read: number; walkthroughs_working: number; draft_comments: number; reviews_today: number }
 
-export interface StackItem { number: number; title: string; url: string; state: 'open' | 'closed' | 'merged'; draft: boolean; author: string; base_ref: string; head_ref: string; depth: number; here: boolean; local_id?: number; my_review?: string; reviewed_current?: boolean }
+export interface StackItem { number: number; title: string; url: string; state: 'open' | 'closed' | 'merged'; draft: boolean; author: string; base_ref: string; head_ref: string; depth: number; parent: number; here: boolean; line: boolean; local_id?: number; my_review?: string; reviewed_current?: boolean }
 export interface Stack { base: string; items: StackItem[] }
+export interface StackMember extends StackItem {
+  additions: number; deletions: number; changed_files: number; walkthrough?: WalkBrief; tldr?: string; budget?: Budget[]; steps?: string[]
+  later: Record<string, number[]>; earlier: Record<string, number[]>
+}
+export interface StackSummary { tldr: string; story: { number: number; adds: string }[]; risks: { level: 'high' | 'medium' | 'low'; text: string; numbers: number[] }[]; questions: string[]; heads: string; at: string }
+export interface StackReviewPage { stack: Stack | null; members?: StackMember[]; pull?: Pull; summary?: StackSummary; summary_stale?: boolean; error?: string }

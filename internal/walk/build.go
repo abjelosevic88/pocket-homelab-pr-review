@@ -1220,12 +1220,23 @@ func nonEmpty(in []string) []string {
 	return out
 }
 
+// firstParagraph is the first paragraph of a description that is not a
+// heading ("## Summary") or a horizontal rule.
 func firstParagraph(body string) string {
-	body = strings.TrimSpace(body)
-	if i := strings.Index(body, "\n\n"); i > 0 {
-		body = body[:i]
+	for _, para := range strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n\n") {
+		var keep []string
+		for _, l := range strings.Split(para, "\n") {
+			t := strings.TrimSpace(l)
+			if t == "" || strings.HasPrefix(t, "#") || strings.Trim(t, "-*_= ") == "" {
+				continue
+			}
+			keep = append(keep, t)
+		}
+		if len(keep) > 0 {
+			return clipText(strings.Join(keep, " "), 800)
+		}
 	}
-	return clipText(body, 800)
+	return ""
 }
 
 func clipList(in []string, n int) []string {

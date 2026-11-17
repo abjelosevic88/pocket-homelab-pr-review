@@ -633,3 +633,25 @@ button.ghs-chip:not(:disabled):hover, a.ghs-chip:hover { background: var(--hover
 .stack-state { display: inline-flex; color: var(--accent-ink); }
 .stack-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 @media (max-width: 720px) { .stack-item { max-width: 160px; } }
+.stack-l { border: 0; background: none; font: inherit; cursor: pointer; padding: 0; }
+.stack-l:hover { color: var(--accent-ink); }
+.later-chip { background: rgba(130, 80, 223, .12); color: #8250df; }
+
+/* ---- the stack page ---- */
+.stack-page { max-width: 980px; }
+.stack-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.stack-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.stack-card.next { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.stack-card.done .step-num { background: var(--success); color: #fff; }
+.stack-card.s-closed { opacity: .55; }
+.stack-card.base { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-style: dashed; background: none; }
+.stack-card-main { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.stack-card-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.stack-card-title { font-weight: 650; font-size: 14.5px; color: var(--text); text-align: left; }
+.stack-card-text { margin: 0; font-size: 13.5px; line-height: 1.45; }
+.stack-card-foot { gap: 8px; align-items: center; }
+.stack-steps { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+@media (max-width: 720px) { .stack-card { grid-template-columns: auto minmax(0, 1fr); } .stack-card > .btn { grid-column: 2; justify-self: start; } }
+.stack-h { display: flex; align-items: center; gap: 8px; }
+.later-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.later-ink { display: inline-flex; align-items: center; gap: 4px; color: #8250df; }
