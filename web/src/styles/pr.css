@@ -639,7 +639,7 @@ button.ghs-chip:not(:disabled):hover, a.ghs-chip:hover { background: var(--hover
 
 /* ---- the stack page ---- */
 .stack-page { max-width: 980px; }
-.stack-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.stack-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; }
 .stack-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
 .stack-card.next { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .stack-card.done .step-num { background: var(--success); color: #fff; }
@@ -655,3 +655,13 @@ button.ghs-chip:not(:disabled):hover, a.ghs-chip:hover { background: var(--hover
 .stack-h { display: flex; align-items: center; gap: 8px; }
 .later-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .later-ink { display: inline-flex; align-items: center; gap: 4px; color: #8250df; }
+/* the tree: one 26px column per level; lines run through the gap between rows */
+.stack-row { display: flex; align-items: stretch; }
+.stack-row > .stack-card { flex: 1; min-width: 0; margin-bottom: 8px; }
+.stack-base-row { margin-bottom: 8px; }
+.tg { position: relative; width: 26px; flex-shrink: 0; }
+.tg.pipe::before, .tg.tee::before, .tg.elbow::before { content: ""; position: absolute; left: 12px; top: -8px; border-left: 2px solid var(--border-strong, #c9c9d1); }
+.tg.pipe::before, .tg.tee::before { bottom: 0; }
+.tg.elbow::before { height: 34px; }
+.tg.tee::after, .tg.elbow::after { content: ""; position: absolute; left: 12px; top: 24px; width: 14px; border-top: 2px solid var(--border-strong, #c9c9d1); }
+@media (max-width: 720px) { .tg { width: 14px; } .tg.pipe::before, .tg.tee::before, .tg.elbow::before, .tg.tee::after, .tg.elbow::after { left: 5px; } .tg.tee::after, .tg.elbow::after { width: 9px; } }

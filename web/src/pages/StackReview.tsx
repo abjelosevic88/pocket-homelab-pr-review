@@ -12,6 +12,14 @@ import { useOpenMember } from '../components/StackBar'
 import { WalkPill } from './Inbox'
 
 const careful = (m: StackMember) => m.budget?.find(b => b.focus === 'careful')?.lines || 0
+/** The tree lines in front of a member: │ an ancestor's branch goes on, ├ a sibling follows, └ the last one, '' nothing. */
+function guides(ms: StackMember[], i: number): string[] {
+  const parentOf = new Map(ms.map(m => [m.number, m.parent]))
+  const laterSibling = (n: number) => { const at = ms.findIndex(m => m.number === n); return ms.slice(at + 1).some(m => m.parent === parentOf.get(n)) }
+  const chain: number[] = [] // from my depth-1 ancestor down to me
+  for (let x = ms[i].number; parentOf.get(x); x = parentOf.get(x)!) chain.unshift(x)
+  return chain.map((n, k) => k === chain.length - 1 ? (laterSibling(n) ? 'tee' : 'elbow') : (laterSibling(n) ? 'pipe' : ''))
+}
 const reviewedNow = (m: StackMember) => !!m.reviewed_current || m.state === 'merged'
 
 export default function StackReview() {
@@ -109,7 +117,7 @@ export default function StackReview() {
         <h3>Review them in this order</h3>
         <p className="muted small">From the bottom of the stack up: each one comes right after the one it builds on, so you read it on top of what you already know{members.some(m => m.depth > 0 && members.filter(x => x.parent === m.parent).length > 1) ? '; two built on the same one are side branches, indented the same' : ''}. A file that a later one changes again is marked: read it there for the idea, and for the details in the last one that changes it.</p>
         <ol className="stack-list">
-          <li className="stack-card base"><span className="step-num"><Icon name="commit" size={12} /></span><span className="muted small">merges into</span> <code>{page.stack.base}</code></li>
+          <li className="stack-card base stack-base-row"><span className="step-num"><Icon name="commit" size={12} /></span><span className="muted small">merges into</span> <code>{page.stack.base}</code></li>
           {members.map((m, i) => {
             const story = sum?.story.find(x => x.number === m.number)?.adds
             const later = Object.keys(m.later).length
@@ -117,7 +125,9 @@ export default function StackReview() {
             const earlier = Object.keys(m.earlier).length
             const c = careful(m)
             return (
-              <li key={m.number} style={{ marginLeft: `${Math.min(m.depth, 6) * 18}px` }} className={`stack-card s-${m.state} ${m.number === next?.number ? 'next' : ''} ${reviewedNow(m) ? 'done' : ''}`}>
+              <li key={m.number} className="stack-row">
+              {guides(members, i).map((g, k) => <span key={k} className={`tg ${g}`} aria-hidden />)}
+              <div className={`stack-card s-${m.state} ${m.number === next?.number ? 'next' : ''} ${reviewedNow(m) ? 'done' : ''}`}>
                 <span className="step-num">{reviewedNow(m) ? <Icon name="check" size={13} strokeWidth={2.6} /> : i + 1}</span>
                 <div className="stack-card-main">
                   <div className="stack-card-head">
@@ -144,6 +154,7 @@ export default function StackReview() {
                   </div>
                 </div>
                 <button type="button" className={`btn sm ${m.number === next?.number ? 'primary' : ''}`} onClick={() => open(m)} disabled={busy === m.number}>{m.local_id ? 'Open' : 'Add'}<Icon name="chevron-right" size={13} /></button>
+              </div>
               </li>
             )
           })}
