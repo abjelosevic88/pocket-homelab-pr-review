@@ -329,7 +329,7 @@ func Build(ctx context.Context, in Input, ai AI, progress func(string)) (*Doc, [
 	}
 	var missing []string
 	for _, f := range files {
-		if f.Truncated {
+		if f.Truncated && f.Layer != "noise" {
 			missing = append(missing, f.Path)
 		}
 	}
