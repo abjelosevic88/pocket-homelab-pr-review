@@ -35,8 +35,11 @@ export interface Pull {
 
 export interface PullList { pulls: Pull[]; github: { connected: boolean; login: string }; sync: { at: string; error: string }; syncing: boolean; demo: boolean }
 
-export interface Unit { id: string; path: string; hunks: number[] | null; hashes: string[]; summary: string; layer: string }
-export interface Step { key: string; title: string; why: string; layer: string; risks: string[]; units: Unit[] }
+export type Focus = 'careful' | 'skim' | 'trust' | ''
+export interface Unit { id: string; path: string; hunks: number[] | null; hashes: string[]; summary: string; layer: string; focus?: Focus; focus_why?: string }
+export interface Step { key: string; title: string; why: string; layer: string; risks: string[]; units: Unit[]; chapter?: number }
+export interface Chapter { key: string; title: string; why: string; risks: string[] }
+export interface Budget { focus: Focus | 'generated'; units: number; files: number; lines: number }
 export interface Risk { level: 'high' | 'medium' | 'low'; title?: string; text: string; units: string[] }
 export interface Stage { title: string; items: string[]; steps: number[] }
 export interface DNode { id: string; label: string; kind: string; new: boolean; step: number }
@@ -45,7 +48,7 @@ export interface Diagram { nodes: DNode[]; edges: DEdge[] }
 export interface Term { term: string; means: string }
 export interface Doc {
   title: string; tldr?: string; overview: string; flow?: Stage[]; diagram?: Diagram; terms?: Term[]; before: string; after: string; steps: Step[]; noise: Unit[]; risks: Risk[]; questions: string[]
-  order: 'ai' | 'layers'; warnings: string[]; stats: { steps: number; units: number; files: number; additions: number; deletions: number }
+  order: 'ai' | 'layers'; warnings: string[]; chapters?: Chapter[]; budget?: Budget[]; stats: { steps: number; units: number; files: number; additions: number; deletions: number }
 }
 export interface TFile { path: string; status: string; additions: number; deletions: number; patch?: string; note?: string }
 export interface Event { kind: 'commit' | 'edit'; at: string; title: string; body?: string; sha?: string; author?: string; files: TFile[] }
@@ -53,7 +56,7 @@ export interface Walkthrough { id: number; pull_id: number; head_sha: string; ba
 
 export interface Line { t: '+' | '-' | ' ' | '\\'; o?: number; n?: number; s: string }
 export interface Hunk { header: string; old_start: number; old_lines: number; new_start: number; new_lines: number; lines: Line[]; hash: string }
-export interface WFile { id: number; path: string; old_path: string; status: string; additions: number; deletions: number; layer: string; summary: string; binary: boolean; truncated: boolean; sort: number; hunks: Hunk[] }
+export interface WFile { id: number; path: string; old_path: string; status: string; additions: number; deletions: number; layer: string; summary: string; binary: boolean; truncated: boolean; sort: number; hunks: Hunk[]; lazy?: boolean }
 
 export interface Comment { id: number; pull_id: number; commit_sha: string; path: string; side: 'LEFT' | 'RIGHT'; line: number; start_line: number; step: string; body: string; state: 'draft' | 'sent'; review_id: number; created_at: string; updated_at: string }
 export interface Review { id: number; pull_id: number; event: 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT'; body: string; commit_sha: string; comments: number; gh_id: number; gh_url: string; day: string; created_at: string; repo?: string; number?: number; title?: string }
@@ -77,3 +80,6 @@ export interface PullPage {
 }
 
 export interface Dashboard { waiting: number; open: number; mine: number; walkthroughs_to_read: number; walkthroughs_working: number; draft_comments: number; reviews_today: number }
+
+export interface StackItem { number: number; title: string; url: string; state: 'open' | 'closed' | 'merged'; draft: boolean; author: string; base_ref: string; head_ref: string; depth: number; here: boolean; local_id?: number; my_review?: string; reviewed_current?: boolean }
+export interface Stack { base: string; items: StackItem[] }

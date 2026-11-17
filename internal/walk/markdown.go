@@ -96,8 +96,30 @@ func Markdown(d *Doc, prURL, title string, link func(path string) string) string
 		}
 		b.WriteString("\n")
 	}
+	if len(d.Budget) > 0 {
+		names := map[string]string{"careful": "Read carefully", "skim": "Skim", "trust": "Trust (tests, mechanical)", "": "Not rated", "generated": "Generated, left out"}
+		b.WriteString("**Where the attention goes**\n\n| | files | changed lines |\n| --- | ---: | ---: |\n")
+		for _, r := range d.Budget {
+			fmt.Fprintf(&b, "| %s | %d | %d |\n", names[r.Focus], r.Files, r.Lines)
+		}
+		b.WriteString("\n")
+	}
 	b.WriteString("### Read it in this order\n\n")
+	for _, r := range d.Budget {
+		if r.Focus == "careful" {
+			b.WriteString("🔍 = read carefully\n\n")
+		}
+	}
+	chapter := 0
 	for i, s := range d.Steps {
+		if s.Chapter > 0 && s.Chapter != chapter && s.Chapter <= len(d.Chapters) {
+			chapter = s.Chapter
+			c := d.Chapters[chapter-1]
+			fmt.Fprintf(&b, "#### Chapter %d: %s\n\n", chapter, c.Title)
+			if c.Why != "" {
+				fmt.Fprintf(&b, "%s\n\n", c.Why)
+			}
+		}
 		fmt.Fprintf(&b, "**%d. %s**", i+1, s.Title)
 		if s.Why != "" {
 			fmt.Fprintf(&b, " — %s", s.Why)
@@ -108,7 +130,11 @@ func Markdown(d *Doc, prURL, title string, link func(path string) string) string
 			if len(u.Hunks) > 0 {
 				part = " (part)"
 			}
-			fmt.Fprintf(&b, "- [`%s`](%s)%s — %s\n", u.Path, link(u.Path), part, u.Summary)
+			mark := ""
+			if u.Focus == "careful" {
+				mark = " 🔍"
+			}
+			fmt.Fprintf(&b, "- [`%s`](%s)%s%s — %s\n", u.Path, link(u.Path), part, mark, u.Summary)
 		}
 		for _, r := range s.Risks {
 			fmt.Fprintf(&b, "  - ⚠ %s\n", r)

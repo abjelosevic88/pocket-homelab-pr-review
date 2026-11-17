@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
-import type { Comment, Doc, Event, PullPage, Step, Thread, Unit, View, Viewed, WFile } from '../lib/types'
+import type { Comment, Doc, Event, Hunk, PullPage, Step, Thread, Unit, View, Viewed, WFile } from '../lib/types'
 import { parsePatch, short } from '../lib/diff'
 import { ago, fmtDateTime } from '../lib/format'
 import { announceChange, useCrumb } from '../components/Layout'
@@ -15,6 +15,7 @@ import { AgentModal } from '../components/AgentModal'
 import { Select } from '../components/Select'
 import { DataFlow } from '../components/DataFlow'
 import { PullStatus } from '../components/PullStatus'
+import { StackBar } from '../components/StackBar'
 import { AIDock, Conversations, useAIDock } from '../components/AIDock'
 import { AIMark } from '../components/AIMark'
 import { Empty, Loading, MenuButton, type MenuItem, Modal, Segmented, Spinner, copyText, errMsg, modalOpen, useIsMobile, useToast } from '../components/ui'
@@ -29,6 +30,7 @@ function normalize(p: PullPage): PullPage {
     d.steps = (d.steps || []).map(s => ({ ...s, risks: s.risks || [], units: (s.units || []).map(u => ({ ...u, hashes: u.hashes || [] })) }))
     d.noise = d.noise || []; d.risks = (d.risks || []).map(r => ({ ...r, units: r.units || [] })); d.questions = d.questions || []; d.warnings = d.warnings || []
     d.flow = (d.flow || []).map(g => ({ ...g, items: g.items || [], steps: g.steps || [] })); d.terms = d.terms || []
+    d.chapters = (d.chapters || []).map(c => ({ ...c, risks: c.risks || [] })); d.budget = d.budget || []
     if (d.diagram) d.diagram = { nodes: d.diagram.nodes || [], edges: d.diagram.edges || [] }
   }
   if (p.walkthrough) p.walkthrough.timeline = (p.walkthrough.timeline || []).map(e => ({ ...e, files: e.files || [] }))
@@ -49,6 +51,30 @@ const isTest = (u: Unit) => u.layer === 'tests' || TEST_PATH.test(u.path)
 const MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
 const modKey = MAC ? '⌘' : 'Ctrl'
 const modDown = (e: { metaKey: boolean; ctrlKey: boolean }) => MAC ? e.metaKey : e.ctrlKey
+
+/** How much attention a part needs: read every line, skim, or trust (tests CI runs, mechanical edits). */
+const FOCUS_LABEL: Record<string, string> = { careful: 'Read carefully', skim: 'Skim', trust: 'Trust', '': 'Not rated', generated: 'Generated' }
+const FOCUS_HELP: Record<string, string> = {
+  careful: 'Runs in production as soon as this merges: data, permissions, shared code. Read every line.',
+  skim: 'Plain new code, wiring, or code behind a switch that is off. Read the shape, not every line.',
+  trust: 'Tests CI runs, mechanical edits, wording. A glance is enough.',
+  '': 'The AI did not rate these.',
+  generated: 'Snapshots, lock files and generated code, left out of the walkthrough.',
+}
+/** Rough reading pace in changed lines an hour. */
+const PACE: Record<string, number> = { careful: 300, skim: 1500 }
+const isTrust = (u: Unit) => u.focus === 'trust'
+function hours(lines: number, focus: string) {
+  const pace = PACE[focus]
+  if (!pace || !lines) return ''
+  const m = Math.max(5, Math.round((lines / pace) * 60 / 5) * 5)
+  return m < 60 ? `about ${m} min` : `about ${(Math.round((m / 60) * 2) / 2).toString().replace('.5', '½')} h`
+}
+/** Hide the parts you can trust (remembered in this browser). */
+function useHideTrusted(): [boolean, (v: boolean) => void] {
+  const [v, set] = useState(() => localStorage.getItem('ppr-hide-trusted') === '1')
+  return [v, (x: boolean) => { localStorage.setItem('ppr-hide-trusted', x ? '1' : ''); set(x) }]
+}
 
 const LAYER_LABEL: Record<string, string> = { schema: 'database', model: 'model', data: 'data access', logic: 'logic', api: 'API', config: 'config', ui: 'UI', tests: 'tests', docs: 'docs', build: 'build', noise: 'generated' }
 
@@ -86,6 +112,7 @@ export default function Pull() {
   const [err, setErr] = useState('')
   const [threads, setThreads] = useState<Thread[]>([])
   const [modal, setModal] = useState<'review' | 'agent' | 'ask' | 'warnings' | null>(null)
+  const [hideTrusted, setHideTrusted] = useHideTrusted()
   const v = sp.get('v')
   const load = useCallback(async () => {
     try { setPage(normalize(await api.get<PullPage>(`${V1}/pulls/${id}${v ? `?v=${v}` : ''}`))); setErr('') } catch (e) { setErr(errMsg(e)) }
@@ -152,6 +179,22 @@ export default function Pull() {
   }
 
   const rewalk = async () => { try { await api.post(`${V1}/pulls/${id}/walkthrough`); toast('Making a new walkthrough'); if (v) { const n = new URLSearchParams(sp); n.delete('v'); setSp(n) } else load() } catch (e) { toast(errMsg(e), 'err') } }
+  const copyStackPlan = async () => {
+    if (!doc || !page) return
+    const fm = new Map(page.files.map(f => [f.path, f]))
+    const lines = [`This pull request is a lot to review at once. It could go in as a stack of ${doc.chapters!.length}, each one on top of the one before:`, '']
+    doc.chapters!.forEach((c, i) => {
+      const us = doc.steps.filter(s => s.chapter === i + 1).flatMap(s => s.units)
+      const paths = [...new Set(us.map(u => u.path))]
+      const n = us.reduce((t, u) => t + unitLines(u, fm.get(u.path)), 0)
+      lines.push(`${i + 1}. **${c.title}** — ${paths.length} files, ${n} changed lines${c.why ? `. ${c.why}` : ''}`)
+      paths.slice(0, 12).forEach(x => lines.push(`   - \`${x}\``))
+      if (paths.length > 12) lines.push(`   - … and ${paths.length - 12} more`)
+    })
+    toast(await copyText(lines.join('\n')) ? 'Copied: the chapters as a suggested stack' : 'Could not copy', 'ok')
+  }
+  const markTrusted = (units: Unit[]) => { const todo = units.filter(u => isTrust(u) && u.hashes.length > 0 && !unitDone(u, viewed)); if (todo.length) setViewed(todo, true) }
+  const hunksUrl = page?.walkthrough ? `${V1}/pulls/${id}/walkthroughs/${page.walkthrough.id}/hunks?path=` : ''
   const copyMd = async () => { try { const md = await api.getText(`${V1}/pulls/${id}/walkthrough.md${v ? `?v=${v}` : ''}`); toast(await copyText(md) ? 'Copied as Markdown' : 'Could not copy', 'ok') } catch (e) { toast(errMsg(e), 'err') } }
   const postMd = async () => { try { const r = await api.post<{ url: string }>(`${V1}/pulls/${id}/walkthrough/post`); toast('Posted on the pull request'); window.open(r.url, '_blank', 'noopener') } catch (e) { toast(errMsg(e), 'err') } }
   const markAndNext = () => {
@@ -195,6 +238,7 @@ export default function Pull() {
   const more: MenuItem[] = [
     { label: 'Open on GitHub', icon: 'external', onSelect: () => window.open(p.url, '_blank', 'noopener') },
     { label: 'Copy the walkthrough as Markdown', icon: 'copy', disabled: !doc, onSelect: copyMd },
+    ...(doc?.chapters?.length ? [{ label: 'Copy the chapters as a suggested stack', icon: 'copy', onSelect: copyStackPlan } as MenuItem] : []),
     { label: 'Post the walkthrough on the pull request', icon: 'github', disabled: !doc || !page.github.connected || !!settings?.demo, onSelect: postMd },
     { label: 'Hand the comments to a coding agent', icon: 'bot', hint: 'E', onSelect: () => setModal('agent') },
     'sep',
@@ -219,6 +263,7 @@ export default function Pull() {
             {reviewBadge(p)}
           </div>
           {(page.github.connected || settings?.demo) && <PullStatus key={`${p.id}:${p.head_sha}`} pullId={p.id} base={p.base_ref} prUrl={p.url} />}
+          {page.github.connected && !settings?.demo && <StackBar key={p.id} pullId={p.id} />}
         </div>
         <div className="pr-head-actions">
           <button type="button" className={`btn ${dock.open ? 'active' : ''}`} onClick={dock.toggle} disabled={dock.busy} title="Ask Pocket AI about this pull request (i)" aria-pressed={dock.open}>
@@ -244,6 +289,8 @@ export default function Pull() {
             <span className="spacer" />
             <span className="muted small hide-mobile">{doneUnits} of {allUnits} looked at</span>
             <span className="walk-bar wide" aria-hidden><span style={{ width: `${allUnits ? (doneUnits / allUnits) * 100 : 0}%` }} /></span>
+            {steps.some(s => s.units.some(isTrust)) && <button type="button" className={`btn ghost sm ${hideTrusted ? 'active' : ''}`} aria-pressed={hideTrusted} onClick={() => setHideTrusted(!hideTrusted)} title="Tests CI runs and mechanical edits: hide them from the steps">
+              <Icon name={hideTrusted ? 'eye-off' : 'eye'} size={14} />{mobile ? 'Trusted' : hideTrusted ? 'Trusted parts hidden' : 'Hide trusted parts'}</button>}
             {doc.warnings.length > 0 && <button type="button" className="btn ghost sm" onClick={() => setModal('warnings')} title="Notes on this walkthrough"><Icon name="info" size={14} />{doc.warnings.length}</button>}
           </div>
 
@@ -252,17 +299,19 @@ export default function Pull() {
               {!mobile && <StepList steps={steps} doc={doc} current={stepKey} viewed={viewed} drafts={drafts} onGo={goStep} after={<Conversations pull={p} dock={dock} />} />}
               <div className="walk-main">
                 {mobile && stepIdx < 0 && <Conversations pull={p} dock={dock} />}
-                {mobile && <Select ariaLabel="Step" value={stepKey} onChange={goStep} options={[{ value: OVERVIEW, label: 'In one minute' }, ...steps.map((s, i) => ({ value: s.key, label: `${i + 1}. ${s.title}${stepDone(s, viewed) ? ' ✓' : ''}` }))]} />}
+                {mobile && <Select ariaLabel="Step" value={stepKey} onChange={goStep} options={[{ value: OVERVIEW, label: 'In one minute' }, ...steps.map((s, i) => ({ value: s.key, label: `${i + 1}. ${s.title}${stepDone(s, viewed) ? ' ✓' : ''}`, group: s.chapter && doc.chapters?.[s.chapter - 1] ? `${s.chapter}. ${doc.chapters[s.chapter - 1].title}` : undefined }))]} />}
                 {stepIdx < 0
-                  ? <Overview doc={doc} pull={page} viewed={viewed} mobile={mobile} onGo={goStep} onStart={() => steps[0] && goStep(steps[0].key)} onAsk={() => setModal('ask')} />
-                  : <StepView step={steps[stepIdx]} index={stepIdx} total={steps.length} files={files} viewed={viewed} comments={comments} threads={threads} actions={actions}
+                  ? <Overview doc={doc} pull={page} viewed={viewed} mobile={mobile} onGo={goStep} onStart={() => steps[0] && goStep(steps[0].key)} onAsk={() => setModal('ask')}
+                      hideTrusted={hideTrusted} onHideTrusted={setHideTrusted} onMarkTrusted={() => markTrusted(steps.flatMap(s => s.units))} />
+                  : <StepView step={steps[stepIdx]} index={stepIdx} total={steps.length} chapter={steps[stepIdx].chapter ? doc.chapters?.[steps[stepIdx].chapter! - 1] : undefined} chapterNo={steps[stepIdx].chapter || 0} chapters={doc.chapters?.length || 0}
+                      hideTrusted={hideTrusted} onShowTrusted={() => setHideTrusted(false)} onMarkTrusted={markTrusted} hunksUrl={hunksUrl} files={files} viewed={viewed} comments={comments} threads={threads} actions={actions}
                       wrap={!!settings?.diff_wrap} onViewed={setViewed} onNote={addStepNote}
                       onPrev={() => goStep(stepIdx > 0 ? steps[stepIdx - 1].key : OVERVIEW)} onNext={markAndNext} last={stepIdx === steps.length - 1} onFinish={() => setModal('review')} onAsk={() => setModal('ask')} />}
               </div>
             </div>
           )}
           {view === 'built' && <Built events={w.timeline || []} doc={doc} onGoStep={k => goStep(k)} />}
-          {view === 'files' && <AllFiles files={page.files} doc={doc} viewed={viewed} comments={comments} threads={threads} actions={actions} wrap={!!settings?.diff_wrap} onViewed={setViewed} />}
+          {view === 'files' && <AllFiles files={page.files} doc={doc} viewed={viewed} comments={comments} threads={threads} actions={actions} wrap={!!settings?.diff_wrap} onViewed={setViewed} hunksUrl={hunksUrl} />}
         </>
       )}
 
@@ -288,12 +337,21 @@ function StepList({ steps, doc, current, viewed, drafts, onGo, after }: { steps:
         const done = stepDone(s, viewed)
         const changed = !done && s.units.some(u => unitChanged(u, viewed))
         const n = notesFor(s)
+        const careful = s.units.filter(u => u.focus === 'careful').length
+        const ch = s.chapter && s.chapter !== steps[i - 1]?.chapter ? doc.chapters?.[s.chapter - 1] : undefined
+        const inCh = ch ? steps.filter(x => x.chapter === s.chapter) : []
         return (
-          <button key={s.key} type="button" className={`step-item ${current === s.key ? 'active' : ''} ${done ? 'done' : ''}`} onClick={() => onGo(s.key)}>
-            <span className="step-num">{done ? <Icon name="check" size={13} strokeWidth={2.6} /> : i + 1}</span>
-            <span className="step-t">{s.title}<span className="step-sub">{s.units.length} {s.units.length === 1 ? 'file' : 'files'}{changed ? ' · changed since you looked' : ''}{s.risks.length ? ` · ${s.risks.length} to check` : ''}</span></span>
-            {n > 0 && <span className="badge sm" title="Your comments">{n}</span>}
-          </button>
+          <React.Fragment key={s.key}>
+            {ch && <button type="button" className="chap-head" onClick={() => onGo(s.key)} title={ch.why}>
+              <span className="chap-no">Chapter {s.chapter}</span><span className="chap-t">{ch.title}</span>
+              <span className="chap-done tnum">{inCh.filter(x => stepDone(x, viewed)).length}/{inCh.length}</span>
+            </button>}
+            <button type="button" className={`step-item ${current === s.key ? 'active' : ''} ${done ? 'done' : ''} ${s.chapter ? 'in-chap' : ''}`} onClick={() => onGo(s.key)}>
+              <span className="step-num">{done ? <Icon name="check" size={13} strokeWidth={2.6} /> : i + 1}</span>
+              <span className="step-t">{s.title}<span className="step-sub">{s.units.length} {s.units.length === 1 ? 'file' : 'files'}{careful ? <> · <span className="careful-ink">{careful} careful</span></> : ''}{changed ? ' · changed since you looked' : ''}{s.risks.length ? ` · ${s.risks.length} to check` : ''}</span></span>
+              {n > 0 && <span className="badge sm" title="Your comments">{n}</span>}
+            </button>
+          </React.Fragment>
         )
       })}
       {doc.noise.length > 0 && <div className="step-noise muted small"><Icon name="package" size={13} />{doc.noise.length} generated or lock file{doc.noise.length === 1 ? '' : 's'} left out</div>}
@@ -317,7 +375,8 @@ function unitLines(u: Unit, f?: WFile) {
   return u.hunks.reduce((n, i) => n + (f.hunks[i]?.lines.filter(l => l.t === '+' || l.t === '-').length || 0), 0)
 }
 
-function Overview({ doc, pull, viewed, mobile, onGo, onStart, onAsk }: { doc: Doc; pull: PullPage; viewed: Viewed; mobile: boolean; onGo: (k: string) => void; onStart: () => void; onAsk: () => void }) {
+function Overview({ doc, pull, viewed, mobile, onGo, onStart, onAsk, hideTrusted, onHideTrusted, onMarkTrusted }: { doc: Doc; pull: PullPage; viewed: Viewed; mobile: boolean; onGo: (k: string) => void; onStart: () => void; onAsk: () => void
+  hideTrusted: boolean; onHideTrusted: (v: boolean) => void; onMarkTrusted: () => void }) {
   const [more, setMore] = useState(false)
   const files = useMemo(() => new Map(pull.files.map(f => [f.path, f])), [pull.files])
   const stepOfUnit = useMemo(() => {
@@ -373,13 +432,19 @@ function Overview({ doc, pull, viewed, mobile, onGo, onStart, onAsk }: { doc: Do
         </section>
       )}
 
+      {(doc.budget || []).length > 0 && <Budget doc={doc} viewed={viewed} hideTrusted={hideTrusted} onHideTrusted={onHideTrusted} onMarkTrusted={onMarkTrusted} />}
+
       <section className="ov-card">
         <h3>Read it in this order</h3>
+        {(doc.chapters || []).length > 0 && <p className="muted small">Too big for one sitting, so it is split into {doc.chapters!.length} chapters — review them one at a time, like a stack of smaller pull requests.</p>}
         <ol className="map">
           {doc.steps.map((s, i) => {
             const done = stepDone(s, viewed)
+            const ch = s.chapter && s.chapter !== doc.steps[i - 1]?.chapter ? doc.chapters?.[s.chapter - 1] : undefined
             return (
-              <li key={s.key}>
+              <React.Fragment key={s.key}>
+              {ch && <li className="map-chap"><span className="chap-no">Chapter {s.chapter}</span><b>{ch.title}</b>{ch.why && <span className="muted small">{ch.why}</span>}</li>}
+              <li>
                 <button type="button" className={`map-row ${done ? 'done' : ''}`} onClick={() => onGo(s.key)} title={s.why}>
                   <span className="step-num">{done ? <Icon name="check" size={13} strokeWidth={2.6} /> : i + 1}</span>
                   <span className="map-main">
@@ -393,6 +458,7 @@ function Overview({ doc, pull, viewed, mobile, onGo, onStart, onAsk }: { doc: Do
                   <span className="map-size" title={`${sizes[i]} changed lines`}><span className={`l-${s.layer}`} style={{ width: `${Math.max(4, (sizes[i] / biggest) * 100)}%` }} /></span>
                 </button>
               </li>
+              </React.Fragment>
             )
           })}
         </ol>
@@ -437,18 +503,22 @@ function Overview({ doc, pull, viewed, mobile, onGo, onStart, onAsk }: { doc: Do
   )
 }
 
-function StepView({ step, index, total, files, viewed, comments, threads, actions, wrap, onViewed, onNote, onPrev, onNext, last, onFinish, onAsk }: {
-  step: Step; index: number; total: number; files: Map<string, WFile>; viewed: Viewed; comments: Comment[]; threads: Thread[]; actions: DiffActions; wrap: boolean
+function StepView({ step, index, total, chapter, chapterNo, chapters, hideTrusted, onShowTrusted, onMarkTrusted, hunksUrl, files, viewed, comments, threads, actions, wrap, onViewed, onNote, onPrev, onNext, last, onFinish, onAsk }: {
+  step: Step; index: number; total: number; chapter?: { title: string; why: string }; chapterNo: number; chapters: number
+  hideTrusted: boolean; onShowTrusted: () => void; onMarkTrusted: (u: Unit[]) => void; hunksUrl: string
+  files: Map<string, WFile>; viewed: Viewed; comments: Comment[]; threads: Thread[]; actions: DiffActions; wrap: boolean
   onViewed: (u: Unit[], on: boolean) => void; onNote: (s: Step, body: string) => Promise<void>; onPrev: () => void; onNext: () => void; last: boolean; onFinish: () => void; onAsk: () => void
 }) {
   const [noting, setNoting] = useState(false)
   const notes = comments.filter(c => !c.path && c.step === step.title)
   const done = stepDone(step, viewed)
+  const trusted = step.units.filter(isTrust)
+  const trustedLeft = trusted.filter(u => u.hashes.length > 0 && !unitDone(u, viewed)).length
   const top = useRef<HTMLDivElement>(null)
   return (
     <div className="step-view" ref={top}>
       <div className="step-head">
-        <span className="muted small">Step {index + 1} of {total}</span>
+        <span className="muted small">{chapter ? <>Chapter {chapterNo} of {chapters}: <b>{chapter.title}</b> · </> : ''}Step {index + 1} of {total}</span>
         <h3>{step.title}</h3>
         {step.why && <p className="step-why">{step.why}</p>}
         {step.risks.length > 0 && <div className="callout warn"><Icon name="alert" size={15} /><div><b>Check here</b><ul className="tight-list">{step.risks.map((r, i) => <li key={i}>{r}</li>)}</ul></div></div>}
@@ -459,7 +529,16 @@ function StepView({ step, index, total, files, viewed, comments, threads, action
         {notes.map(c => <MyComment key={c.id} c={c} actions={actions} />)}
         {noting && <Composer label="A note on the whole step (it goes into the review's text)" onCancel={() => setNoting(false)} onSave={async b => { await onNote(step, b); setNoting(false) }} />}
       </div>
-      {step.units.map(u => <UnitView key={u.id} u={u} file={files.get(u.path)} viewed={viewed} comments={comments} threads={threads} actions={actions} wrap={wrap} onViewed={onViewed} />)}
+      {step.units.filter(u => !(hideTrusted && isTrust(u))).map(u => <UnitView key={u.id} u={u} file={files.get(u.path)} viewed={viewed} comments={comments} threads={threads} actions={actions} wrap={wrap} onViewed={onViewed} hunksUrl={hunksUrl} />)}
+      {trusted.length > 0 && (
+        <div className="trusted-row">
+          <Icon name="check-circle" size={15} />
+          <span>{hideTrusted ? `${trusted.length} trusted ${trusted.length === 1 ? 'part' : 'parts'} hidden` : `${trusted.length} ${trusted.length === 1 ? 'part' : 'parts'} you can trust`} <span className="muted small">— tests CI runs, mechanical edits{trustedLeft ? '' : ' · all looked at'}</span></span>
+          <span className="spacer" />
+          {hideTrusted && <button type="button" className="btn sm ghost" onClick={onShowTrusted}>Show them</button>}
+          {trustedLeft > 0 && <button type="button" className="btn sm" onClick={() => onMarkTrusted(step.units)}><Icon name="check" size={13} />Mark {trustedLeft} as looked at</button>}
+        </div>
+      )}
       <div className="step-foot">
         <button type="button" className="btn" onClick={onPrev}><Icon name="chevron-left" size={15} />{index === 0 ? 'Overview' : 'Previous'}</button>
         <span className="spacer" />
@@ -471,14 +550,22 @@ function StepView({ step, index, total, files, viewed, comments, threads, action
   )
 }
 
-function UnitView({ u, file, viewed, comments, threads, actions, wrap, onViewed }: {
+function UnitView({ u, file, viewed, comments, threads, actions, wrap, onViewed, hunksUrl, defaultOpen = true }: {
   u: Unit; file?: WFile; viewed: Viewed; comments: Comment[]; threads: Thread[]; actions: DiffActions; wrap: boolean; onViewed: (u: Unit[], on: boolean) => void
+  hunksUrl: string; defaultOpen?: boolean
 }) {
   const done = unitDone(u, viewed)
   const changed = unitChanged(u, viewed)
-  const [open, setOpen] = useState(!done)
+  const [open, setOpen] = useState(!done && defaultOpen && !isTrust(u))
+  // a diff too large for the page comes when asked for
+  const [lazy, setLazy] = useState<{ hunks?: Hunk[]; busy?: boolean; err?: string }>({})
+  const loadLazy = async () => {
+    setLazy({ busy: true })
+    try { const r = await api.get<{ hunks: Hunk[] }>(hunksUrl + encodeURIComponent(u.path)); setLazy({ hunks: r.hunks || [] }) } catch (e) { setLazy({ err: errMsg(e) }) }
+  }
+  const hunks = file?.lazy ? lazy.hunks : file?.hunks
   useEffect(() => { if (done) setOpen(false) }, [done])
-  const parts = file ? file.hunks.length : 0
+  const parts = hunks ? hunks.length : 0
   return (
     <section className={`unit ${done ? 'done' : ''}`} data-hint={`${modKey} Click to ${done ? 'unmark' : 'mark as looked at'}`}
       onClickCapture={e => {
@@ -494,6 +581,7 @@ function UnitView({ u, file, viewed, comments, threads, actions, wrap, onViewed 
           <span className="unit-chips">
             {file && <span className={`fstat ${file.status}`}>{file.status}</span>}
             <span className="layer-chip">{LAYER_LABEL[u.layer] || u.layer}</span>
+            {u.focus && <span className={`focus-chip f-${u.focus}`} title={`${FOCUS_HELP[u.focus]}${u.focus_why ? `\n\nHere: ${u.focus_why}` : ''}`}>{FOCUS_LABEL[u.focus]}{u.focus_why && <span className="focus-why hide-mobile"> · {u.focus_why}</span>}</span>}
             {u.hunks && parts > 1 && <span className="badge sm" title="Only the part of this file that belongs to this step">part: {u.hunks.length} of {parts} changes</span>}
             {file && <span className="tnum small"><span className="add">+{file.additions}</span> <span className="del">−{file.deletions}</span></span>}
             {changed && <span className="badge warn sm">changed since you looked</span>}
@@ -507,7 +595,9 @@ function UnitView({ u, file, viewed, comments, threads, actions, wrap, onViewed 
       </div>
       {open && file && (file.truncated ? <div className="diff-empty muted small">GitHub sends no diff for a file this large — look at it on GitHub.</div>
         : file.binary ? <div className="diff-empty muted small">A binary file.</div>
-        : <Diff path={u.path} hunks={file.hunks} only={u.hunks} comments={comments} threads={threads} actions={actions} wrap={wrap} />)}
+        : !hunks ? <div className="diff-empty muted small">{lazy.err ? <span className="danger-text">{lazy.err} </span> : `A large diff: ${(file.additions + file.deletions).toLocaleString()} changed lines. `}
+            <button type="button" className="link-btn" onClick={loadLazy} disabled={lazy.busy}>{lazy.busy ? 'Loading…' : 'Show it anyway'}</button></div>
+        : <Diff path={u.path} hunks={hunks} only={u.hunks} comments={comments} threads={threads} actions={actions} wrap={wrap} />)}
     </section>
   )
 }
@@ -555,9 +645,10 @@ function Built({ events, doc, onGoStep }: { events: Event[]; doc: Doc; onGoStep:
   )
 }
 
-function AllFiles({ files, doc, viewed, comments, threads, actions, wrap, onViewed }: {
-  files: WFile[]; doc: Doc; viewed: Viewed; comments: Comment[]; threads: Thread[]; actions: DiffActions; wrap: boolean; onViewed: (u: Unit[], on: boolean) => void
+function AllFiles({ files, doc, viewed, comments, threads, actions, wrap, onViewed, hunksUrl }: {
+  files: WFile[]; doc: Doc; viewed: Viewed; comments: Comment[]; threads: Thread[]; actions: DiffActions; wrap: boolean; onViewed: (u: Unit[], on: boolean) => void; hunksUrl: string
 }) {
+  const many = files.length > 40
   const unitsOf = useMemo(() => {
     const m = new Map<string, Unit[]>()
     for (const u of [...doc.steps.flatMap(s => s.units), ...doc.noise]) m.set(u.path, [...(m.get(u.path) || []), u])
@@ -566,13 +657,49 @@ function AllFiles({ files, doc, viewed, comments, threads, actions, wrap, onView
   const sorted = [...files].sort((a, b) => a.path.localeCompare(b.path))
   return (
     <div className="stack">
-      <p className="muted small">Every changed file, by name — as GitHub shows them. The walkthrough has them in reading order.</p>
+      <p className="muted small">Every changed file, by name — as GitHub shows them. The walkthrough has them in reading order.{many ? ` ${files.length} files, so each one starts folded.` : ''}</p>
       {sorted.map(f => {
         const us = unitsOf.get(f.path) || []
-        const whole: Unit = { id: f.path, path: f.path, hunks: null, hashes: us.flatMap(u => u.hashes), summary: f.summary, layer: f.layer }
-        return <UnitView key={f.path} u={whole} file={f} viewed={viewed} comments={comments} threads={threads} actions={actions} wrap={wrap} onViewed={() => onViewed(us, !unitDone(whole, viewed))} />
+        const rank = { careful: 3, skim: 2, trust: 1, '': 0 }
+        const focus = us.reduce<Unit['focus']>((best, u) => (rank[u.focus || ''] > rank[best || ''] ? u.focus : best), '')
+        const whole: Unit = { id: f.path, path: f.path, hunks: null, hashes: us.flatMap(u => u.hashes), summary: f.summary, layer: f.layer, focus, focus_why: us.find(u => u.focus === focus)?.focus_why }
+        return <UnitView key={f.path} u={whole} file={f} viewed={viewed} comments={comments} threads={threads} actions={actions} wrap={wrap} hunksUrl={hunksUrl} defaultOpen={!many} onViewed={() => onViewed(us, !unitDone(whole, viewed))} />
       })}
     </div>
+  )
+}
+
+/** Where the attention goes: files and lines to read carefully, skim, trust; the generated ones left out. */
+function Budget({ doc, viewed, hideTrusted, onHideTrusted, onMarkTrusted }: { doc: Doc; viewed: Viewed; hideTrusted: boolean; onHideTrusted: (v: boolean) => void; onMarkTrusted: () => void }) {
+  const rows = doc.budget || []
+  const total = Math.max(1, rows.reduce((n, r) => n + r.lines, 0))
+  const all = doc.steps.flatMap(s => s.units)
+  const left = (f: string) => all.filter(u => (u.focus || '') === f && !unitDone(u, viewed)).length
+  const trustLeft = all.filter(u => isTrust(u) && u.hashes.length > 0 && !unitDone(u, viewed)).length
+  const time = ['careful', 'skim'].map(f => { const r = rows.find(x => x.focus === f); return r ? hours(r.lines, f) : '' })
+  return (
+    <section className="ov-card">
+      <h3>Where your time goes</h3>
+      {(time[0] || time[1]) && <p className="muted small">{time[0] && <>Careful reading {time[0]}</>}{time[0] && time[1] && ', '}{time[1] && <>skimming {time[1]}</>}. The rest you can trust or leave out.</p>}
+      <div className="budget-bar" aria-hidden>{rows.map(r => <span key={r.focus} className={`f-${r.focus || 'none'}`} style={{ width: `${(r.lines / total) * 100}%` }} />)}</div>
+      <table className="budget">
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.focus}>
+              <td><span className={`focus-dot f-${r.focus || 'none'}`} /><b>{FOCUS_LABEL[r.focus]}</b><div className="muted xsmall">{FOCUS_HELP[r.focus]}</div></td>
+              <td className="tnum num">{r.files.toLocaleString()} <span className="muted">files</span>{r.focus !== 'generated' && left(r.focus) < r.units && <div className="muted xsmall">{left(r.focus)} left</div>}</td>
+              <td className="tnum num">{r.lines.toLocaleString()} <span className="muted">lines</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {rows.some(r => r.focus === 'trust') && (
+        <div className="row wrap mt">
+          {trustLeft > 0 && <button type="button" className="btn sm" onClick={onMarkTrusted}><Icon name="check" size={13} />Mark the {trustLeft} trusted parts as looked at</button>}
+          <button type="button" className={`btn sm ghost ${hideTrusted ? 'active' : ''}`} aria-pressed={hideTrusted} onClick={() => onHideTrusted(!hideTrusted)}><Icon name={hideTrusted ? 'eye' : 'eye-off'} size={13} />{hideTrusted ? 'Show the trusted parts in the steps' : 'Hide them in the steps'}</button>
+        </div>
+      )}
+    </section>
   )
 }
 

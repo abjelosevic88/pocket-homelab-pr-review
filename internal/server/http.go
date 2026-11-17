@@ -79,6 +79,8 @@ func (s *Server) Router() http.Handler {
 			r.Put("/pulls/{id}/viewed", s.handleSetViewed)
 			r.Get("/pulls/{id}/threads", s.handleThreads)
 			r.Get("/pulls/{id}/status", s.handlePullStatus)
+			r.Get("/pulls/{id}/stack", s.handleStack)
+			r.Get("/pulls/{id}/walkthroughs/{wid}/hunks", s.handleFileHunks)
 			r.Post("/pulls/{id}/reply", s.handleReply)
 			r.Get("/pulls/{id}/comments", s.handleListComments)
 			r.Post("/pulls/{id}/comments", s.handleCreateComment)

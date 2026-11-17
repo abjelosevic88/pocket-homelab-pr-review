@@ -166,7 +166,7 @@ var (
 	lockFiles = map[string]bool{"package-lock.json": true, "yarn.lock": true, "pnpm-lock.yaml": true, "bun.lockb": true, "bun.lock": true,
 		"go.sum": true, "cargo.lock": true, "poetry.lock": true, "pipfile.lock": true, "composer.lock": true, "gemfile.lock": true,
 		"mix.lock": true, "pubspec.lock": true, "podfile.lock": true, "flake.lock": true, "uv.lock": true, "deno.lock": true, "packages.lock.json": true}
-	generatedRe   = regexp.MustCompile(`(?i)(\.pb\.go|_pb2\.py|\.pb\.(cc|h)|\.g\.dart|\.gen\.[a-z]+|\.generated\.[a-z]+|\.min\.(js|css)|\.map|\.snap)$|(^|/)(__generated__|generated|dist|build|vendor|third_party|node_modules)/|(^|/)__snapshots__/`)
+	generatedRe   = regexp.MustCompile(`(?i)(\.pb\.go|_pb2\.py|\.pb\.(cc|h)|\.g\.dart|\.gen\.[a-z]+|\.generated\.[a-z]+|\.min\.(js|css)|\.map|\.snap)$|(^|/)(__generated__|generated|dist|build|vendor|third_party|node_modules)/|(^|/)__snapshots__/|[._-]snapshot\.json$`)
 	generatedHead = regexp.MustCompile(`(?i)(code generated .* do not edit|@generated|auto-?generated|this file was generated)`)
 
 	schemaRe = regexp.MustCompile(`(?i)(^|/)(migrations?|migrate|alembic|flyway|liquibase|schema-migrations)/|\.sql$|(^|/)schema\.prisma$|(^|/)db/schema\.rb$|(^|/)drizzle/|\.migration\.[a-z]+$|(^|/)changelog.*\.(xml|ya?ml)$`)

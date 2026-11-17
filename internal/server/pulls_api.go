@@ -248,22 +248,60 @@ func (s *Server) handleDeletePull(w http.ResponseWriter, r *http.Request) {
 // ---- one pull request ----
 
 // fileOut is a changed file as the page shows it: its diff already split into hunks.
+// A diff larger than lazyPatch is left out of the page and fetched when the
+// person opens it (a 90,000-line snapshot would freeze the browser).
 type fileOut struct {
 	store.WFile
 	Patch string      `json:"-"`
 	Hunks []walk.Hunk `json:"hunks"`
+	Lazy  bool        `json:"lazy,omitempty"`
 }
+
+const lazyPatch = 200_000
 
 func filesOut(files []store.WFile) []fileOut {
 	out := make([]fileOut, 0, len(files))
 	for _, f := range files {
-		fo := fileOut{WFile: f, Hunks: walk.ParsePatch(f.Patch)}
+		fo := fileOut{WFile: f}
+		if len(f.Patch) > lazyPatch {
+			fo.Lazy = true
+		} else {
+			fo.Hunks = walk.ParsePatch(f.Patch)
+		}
 		if fo.Hunks == nil {
 			fo.Hunks = []walk.Hunk{}
 		}
 		out = append(out, fo)
 	}
 	return out
+}
+
+// handleFileHunks is one file's diff in hunks, for a diff left out of the page.
+func (s *Server) handleFileHunks(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	uid := actorID(ctx)
+	wk, err := s.store.GetWalk(ctx, uid, idParam(r, "wid"))
+	if err != nil || wk.PullID != idParam(r, "id") {
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+	path := r.URL.Query().Get("path")
+	files, err := s.store.WalkFiles(ctx, uid, wk.ID, true)
+	if err != nil {
+		s.fail(w, err, "files")
+		return
+	}
+	for _, f := range files {
+		if f.Path == path {
+			h := walk.ParsePatch(f.Patch)
+			if h == nil {
+				h = []walk.Hunk{}
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"hunks": h})
+			return
+		}
+	}
+	writeErr(w, http.StatusNotFound, path+" is not in this walkthrough")
 }
 
 // handleGetPull is the PR page: the pull request, the walkthrough shown (the

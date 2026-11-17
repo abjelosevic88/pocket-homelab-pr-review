@@ -527,9 +527,11 @@ func (a demoAI) Complete(_ context.Context, system, user string, _ bool) (string
 		Summary string `json:"summary"`
 	}
 	type file struct {
-		Path    string `json:"path"`
-		Summary string `json:"summary"`
-		Parts   []part `json:"parts,omitempty"`
+		Path     string `json:"path"`
+		Summary  string `json:"summary"`
+		Focus    string `json:"focus"`
+		FocusWhy string `json:"focus_why"`
+		Parts    []part `json:"parts,omitempty"`
 	}
 	var out struct {
 		Files []file `json:"files"`
@@ -539,6 +541,7 @@ func (a demoAI) Complete(_ context.Context, system, user string, _ bool) (string
 			continue
 		}
 		fl := file{Path: f.Path, Summary: a.pr.sums[f.Path]}
+		fl.Focus, fl.FocusWhy = demoFocus(f.Path)
 		for _, p := range a.pr.parts[f.Path] {
 			fl.Parts = append(fl.Parts, part{p.hunks, p.text})
 		}
@@ -546,6 +549,19 @@ func (a demoAI) Complete(_ context.Context, system, user string, _ bool) (string
 	}
 	b, _ := json.Marshal(out)
 	return string(b), nil
+}
+
+// demoFocus is the attention a demo file needs, as an AI would rate it.
+func demoFocus(p string) (string, string) {
+	switch {
+	case strings.Contains(p, "_test.") || strings.Contains(p, ".test.") || strings.Contains(p, "/tests/"):
+		return "trust", "a test; CI runs it"
+	case strings.Contains(p, "migration") || strings.HasSuffix(p, ".sql") || strings.Contains(p, "service") || strings.Contains(p, "checkout") || strings.Contains(p, "upgrade"):
+		return "careful", "changes money or stored data"
+	case strings.HasSuffix(p, ".md") || strings.HasSuffix(p, ".css"):
+		return "trust", "wording and looks only"
+	}
+	return "skim", "plain wiring"
 }
 
 type demoBuild struct {

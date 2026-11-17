@@ -22,6 +22,8 @@ type File struct {
 	Truncated bool   `json:"truncated,omitempty"`
 	Layer     string `json:"layer"`
 	Summary   string `json:"summary"`
+	Focus     string `json:"focus,omitempty"`     // careful | skim | trust ("" = not rated)
+	FocusWhy  string `json:"focus_why,omitempty"` // a few words: why that much attention
 }
 
 // Commit is one commit as the story of how it was built knows it.
@@ -65,16 +67,40 @@ type Doc struct {
 	Warnings  []string `json:"warnings"`
 	Stats     Stats    `json:"stats"`
 	Edges     []Edge   `json:"edges,omitempty"`
+	// Chapters split a large pull request into parts reviewed one at a time;
+	// each step names its chapter (1-based). None for a small one.
+	Chapters []Chapter `json:"chapters,omitempty"`
+	// Budget is where a reviewer's attention goes: careful, skim, trust,
+	// not rated, generated — files and changed lines of each.
+	Budget []Budget `json:"budget,omitempty"`
+}
+
+// Chapter is one part of a large pull request: a feature, an integration, or
+// the shared changes everything else builds on.
+type Chapter struct {
+	Key   string   `json:"key"`
+	Title string   `json:"title"`
+	Why   string   `json:"why"`
+	Risks []string `json:"risks"`
+}
+
+// Budget is how much of the pull request needs one kind of attention.
+type Budget struct {
+	Focus string `json:"focus"` // careful | skim | trust | "" (not rated) | generated
+	Units int    `json:"units"`
+	Files int    `json:"files"`
+	Lines int    `json:"lines"`
 }
 
 // Step is one part of the story.
 type Step struct {
-	Key   string   `json:"key"`
-	Title string   `json:"title"`
-	Why   string   `json:"why"`
-	Layer string   `json:"layer"`
-	Risks []string `json:"risks"`
-	Units []Unit   `json:"units"`
+	Key     string   `json:"key"`
+	Title   string   `json:"title"`
+	Why     string   `json:"why"`
+	Layer   string   `json:"layer"`
+	Risks   []string `json:"risks"`
+	Units   []Unit   `json:"units"`
+	Chapter int      `json:"chapter,omitempty"` // 1-based, when the pull request has chapters
 }
 
 // Unit is a file, or some hunks of one, as a step shows it.
@@ -85,6 +111,10 @@ type Unit struct {
 	Hashes  []string `json:"hashes"`
 	Summary string   `json:"summary"`
 	Layer   string   `json:"layer"`
+	// Focus is how much attention it needs: careful (read every line), skim,
+	// trust (tests CI runs, mechanical edits); FocusWhy says why.
+	Focus    string `json:"focus,omitempty"`
+	FocusWhy string `json:"focus_why,omitempty"`
 }
 
 // Stage is one column of the diagram of how the change fits together.
@@ -143,8 +173,11 @@ type Stats struct {
 const (
 	batchChars   = 60000
 	filePatchCap = 9000
-	maxBatches   = 40
-	maxPlanUnits = 700
+	maxBatches   = 120
+	maxPlanUnits = 1200 // more than this: ordered by layer only
+	chapterAt    = 80   // more units than this: chapters first, then steps per chapter
+	testPatchCap = 2500 // tests need less of their diff for one sentence
+	hugeJSON     = 5000 // added lines that make a .json file data, not code
 	parallel     = 3
 )
 
@@ -159,6 +192,9 @@ func Build(ctx context.Context, in Input, ai AI, progress func(string)) (*Doc, [
 		if files[i].Layer == "" {
 			files[i].Layer = in.Config.Classify(files[i].Path, files[i].Patch)
 		}
+		if files[i].Layer != "noise" && strings.HasSuffix(strings.ToLower(files[i].Path), ".json") && files[i].Deletions == 0 && files[i].Additions > hugeJSON {
+			files[i].Layer = "noise" // a data dump or a snapshot, not something to read
+		}
 	}
 	doc := &Doc{Title: in.Title, Order: "layers", Warnings: []string{}, Risks: []Risk{}, Questions: []string{}, Noise: []Unit{}}
 	edges := Dependencies(files)
@@ -169,10 +205,11 @@ func Build(ctx context.Context, in Input, ai AI, progress func(string)) (*Doc, [
 	for i := range files {
 		byPath[files[i].Path] = &files[i]
 	}
-	parts := map[string][][]int{} // path → hunk groups (from the AI)
-	sums := map[string][]string{} // path → summary per part
+	parts := map[string][][]int{}   // path → hunk groups (from the AI)
+	sums := map[string][]string{}   // path → summary per part
+	focus := map[string][]focusOf{} // path → attention per part
 	if ai != nil {
-		summarise(ctx, in, files, ai, parts, sums, doc, progress)
+		summarise(ctx, in, files, ai, parts, sums, focus, doc, progress)
 	}
 	for i := range files {
 		if s := sums[files[i].Path]; len(s) > 0 && files[i].Summary == "" {
@@ -224,7 +261,18 @@ func Build(ctx context.Context, in Input, ai AI, progress func(string)) (*Doc, [
 					u.Summary = f.Summary
 				}
 			}
+			u.Focus, u.FocusWhy = guessFocus(*f)
+			if fs := focus[p]; len(fs) > 0 {
+				k := 0
+				if g != nil && gi < len(fs) {
+					k = gi
+				}
+				if fs[k].Focus != "" {
+					u.Focus, u.FocusWhy = fs[k].Focus, fs[k].Why
+				}
+			}
 			if f.Layer == "noise" {
+				u.Focus, u.FocusWhy = "", ""
 				noise = append(noise, u)
 			} else {
 				units = append(units, u)
@@ -237,9 +285,18 @@ func Build(ctx context.Context, in Input, ai AI, progress func(string)) (*Doc, [
 
 	planned := false
 	if ai != nil && len(units) > 0 {
-		if len(units) > maxPlanUnits {
+		switch {
+		case len(units) > maxPlanUnits:
 			doc.Warnings = append(doc.Warnings, fmt.Sprintf("This pull request has %d parts, too many for the AI to order at once; they are ordered by layer.", len(units)))
-		} else {
+		case len(units) > chapterAt:
+			progress("Splitting it into chapters")
+			if err := chapters(ctx, in, units, edges, ai, doc, progress); err != nil {
+				doc.Warnings = append(doc.Warnings, "The AI could not split it into chapters ("+short(err.Error())+"); this is the order by layer.")
+			} else {
+				planned = true
+				doc.Order = "ai"
+			}
+		default:
 			progress("Putting the changes in order")
 			if err := plan(ctx, in, units, edges, ai, doc); err != nil {
 				doc.Warnings = append(doc.Warnings, "The AI could not put it in order ("+short(err.Error())+"); this is the order by layer.")
@@ -258,6 +315,10 @@ func Build(ctx context.Context, in Input, ai AI, progress func(string)) (*Doc, [
 	for i := range doc.Steps {
 		doc.Steps[i].Key = stepKey(doc.Steps[i], i)
 	}
+	for i := range doc.Chapters {
+		doc.Chapters[i].Key = "c" + stepKey(Step{Title: doc.Chapters[i].Title}, i)
+	}
+	doc.Budget = budget(doc, byPath)
 	doc.Stats = Stats{Steps: len(doc.Steps), Files: len(files)}
 	for _, st := range doc.Steps {
 		doc.Stats.Units += len(st.Units)
@@ -301,10 +362,47 @@ func (d *Doc) FileOrder() map[string]int {
 
 const summaryVoice = `You explain a pull request to the person who has to review it. For every file below, write one plain sentence (at most 25 words) saying what the change in that file does — and why, when the diff shows it.
 Name the concrete things: tables, columns, functions, routes, settings, screens. Do not start with "This file" or "Changes". No marketing words.
-If the hunks of a file do clearly different jobs that a reviewer would read at different moments (for example one hunk adds a route, another fixes unrelated logging), split them into parts: each part lists its hunk numbers and has its own sentence. Most files have exactly one part; then leave parts out.
-Answer with JSON only: {"files":[{"path":"…","summary":"…","parts":[{"hunks":[0,1],"summary":"…"}]}]}`
+Also say how much attention it needs from a reviewer with little time (focus), and why in at most 10 words (focus_why):
+- "careful": behaviour that runs in production as soon as this merges — data written, changed or deleted, migrations, permissions and who may see what, security, money, concurrency and transactions, shared code many features use; also code that is live even when the description says the feature is behind a switch that is off
+- "skim": new code that is plain, or that only runs once a switch that is off is turned on; types, wiring, configuration, documentation
+- "trust": tests and fixtures (CI runs them), mechanical edits (renames, imports, formatting, re-exports, regenerated code), wording only
+If the hunks of a file do clearly different jobs that a reviewer would read at different moments (for example one hunk adds a route, another fixes unrelated logging), split them into parts: each part lists its hunk numbers and has its own sentence and focus. Most files have exactly one part; then leave parts out.
+Answer with JSON only: {"files":[{"path":"…","summary":"…","focus":"careful","focus_why":"…","parts":[{"hunks":[0,1],"summary":"…","focus":"skim","focus_why":"…"}]}]}`
 
-func summarise(ctx context.Context, in Input, files []File, ai AI, parts map[string][][]int, sums map[string][]string, doc *Doc, progress func(string)) {
+// focusOf is the attention one file, or one part of it, needs.
+type focusOf struct{ Focus, Why string }
+
+func cleanFocus(f, why string) focusOf {
+	f = strings.ToLower(strings.TrimSpace(f))
+	if f != "careful" && f != "skim" && f != "trust" {
+		return focusOf{}
+	}
+	return focusOf{f, oneLine(why, 100)}
+}
+
+// guessFocus is the attention a file needs when the AI did not say.
+func guessFocus(f File) (string, string) {
+	switch f.Layer {
+	case "tests":
+		return "trust", "a test: CI runs it"
+	case "docs":
+		return "skim", "documentation"
+	case "schema":
+		return "careful", "changes what is stored"
+	}
+	if f.Status == "renamed" && f.Additions+f.Deletions == 0 {
+		return "trust", "renamed, nothing else"
+	}
+	return "", ""
+}
+
+func summarise(ctx context.Context, in Input, files []File, ai AI, parts map[string][][]int, sums map[string][]string, focus map[string][]focusOf, doc *Doc, progress func(string)) {
+	capOf := func(f File) int {
+		if f.Layer == "tests" {
+			return testPatchCap
+		}
+		return filePatchCap
+	}
 	var batches [][]int
 	var cur []int
 	size := 0
@@ -312,7 +410,7 @@ func summarise(ctx context.Context, in Input, files []File, ai AI, parts map[str
 		if f.Layer == "noise" {
 			continue
 		}
-		t := len(clipPatch(f.Patch, filePatchCap)) + len(f.Path) + 80
+		t := len(clipPatch(f.Patch, capOf(f))) + len(f.Path) + 80
 		if len(cur) > 0 && (size+t > batchChars || len(cur) >= 40) {
 			batches = append(batches, cur)
 			cur, size = nil, 0
@@ -352,12 +450,12 @@ func summarise(ctx context.Context, in Input, files []File, ai AI, parts map[str
 			sb.WriteString("\nFiles:\n")
 			for _, i := range idx {
 				f := files[i]
-				fmt.Fprintf(&sb, "\n### %s (%s, +%d -%d)\n", f.Path, statusWord(f), f.Additions, f.Deletions)
+				fmt.Fprintf(&sb, "\n### %s (%s, %s, +%d -%d)\n", f.Path, statusWord(f), in.Config.LayerName(f.Layer), f.Additions, f.Deletions)
 				if f.Binary || f.Patch == "" {
 					sb.WriteString("(no text diff)\n")
 					continue
 				}
-				for hi, h := range ParsePatch(clipPatch(f.Patch, filePatchCap)) {
+				for hi, h := range ParsePatch(clipPatch(f.Patch, capOf(f))) {
 					fmt.Fprintf(&sb, "[hunk %d] @@ -%d,%d +%d,%d @@ %s\n", hi, h.OldStart, h.OldLines, h.NewStart, h.NewLines, h.Header)
 					for _, l := range h.Lines {
 						sb.WriteString(l.T)
@@ -369,11 +467,15 @@ func summarise(ctx context.Context, in Input, files []File, ai AI, parts map[str
 			out, err := ai.Complete(ctx, system, sb.String(), true)
 			var res struct {
 				Files []struct {
-					Path    string `json:"path"`
-					Summary string `json:"summary"`
-					Parts   []struct {
-						Hunks   []int  `json:"hunks"`
-						Summary string `json:"summary"`
+					Path     string `json:"path"`
+					Summary  string `json:"summary"`
+					Focus    string `json:"focus"`
+					FocusWhy string `json:"focus_why"`
+					Parts    []struct {
+						Hunks    []int  `json:"hunks"`
+						Summary  string `json:"summary"`
+						Focus    string `json:"focus"`
+						FocusWhy string `json:"focus_why"`
 					} `json:"parts"`
 				} `json:"files"`
 			}
@@ -399,20 +501,32 @@ func summarise(ctx context.Context, in Input, files []File, ai AI, parts map[str
 				if !want[r.Path] {
 					continue
 				}
+				whole := cleanFocus(r.Focus, r.FocusWhy)
 				if len(r.Parts) > 1 {
 					var groups [][]int
 					var texts []string
+					var fs []focusOf
 					for _, p := range r.Parts {
 						groups = append(groups, p.Hunks)
 						texts = append(texts, oneLine(p.Summary, 300))
+						f := cleanFocus(p.Focus, p.FocusWhy)
+						if f.Focus == "" {
+							f = whole
+						}
+						fs = append(fs, f)
 					}
 					if g := validGroups(groups, len(Hashes(*fileByPath(files, r.Path)))); g != nil {
 						parts[r.Path] = g
 						sums[r.Path] = texts
+						focus[r.Path] = fs
 						continue
+					}
+					if whole.Focus == "" {
+						whole = strongest(fs)
 					}
 				}
 				sums[r.Path] = []string{oneLine(r.Summary, 300)}
+				focus[r.Path] = []focusOf{whole}
 			}
 		}(b)
 	}
@@ -420,6 +534,70 @@ func summarise(ctx context.Context, in Input, files []File, ai AI, parts map[str
 	if failed > 0 {
 		doc.Warnings = append(doc.Warnings, fmt.Sprintf("The AI did not answer for %d of %d groups of files (%s); those files have a plain description.", failed, len(batches), short(firstErr)))
 	}
+}
+
+// strongest is the most attention any of the parts asks for.
+func strongest(fs []focusOf) focusOf {
+	rank := map[string]int{"careful": 3, "skim": 2, "trust": 1}
+	var best focusOf
+	for _, f := range fs {
+		if rank[f.Focus] > rank[best.Focus] {
+			best = f
+		}
+	}
+	return best
+}
+
+// budget counts files and changed lines per kind of attention.
+func budget(d *Doc, byPath map[string]*File) []Budget {
+	order := []string{"careful", "skim", "trust", "", "generated"}
+	rows := map[string]*Budget{}
+	files := map[string]map[string]bool{}
+	for _, k := range order {
+		rows[k] = &Budget{Focus: k}
+		files[k] = map[string]bool{}
+	}
+	add := func(u Unit, k string) {
+		f := byPath[u.Path]
+		if f == nil {
+			return
+		}
+		r := rows[k]
+		r.Units++
+		if !files[k][u.Path] {
+			files[k][u.Path] = true
+			r.Files++
+		}
+		if u.Hunks == nil {
+			r.Lines += f.Additions + f.Deletions
+			return
+		}
+		hs := ParsePatch(f.Patch)
+		for _, h := range u.Hunks {
+			if h >= 0 && h < len(hs) {
+				for _, l := range hs[h].Lines {
+					if l.T == "+" || l.T == "-" {
+						r.Lines++
+					}
+				}
+			}
+		}
+	}
+	for _, s := range d.Steps {
+		for _, u := range s.Units {
+			add(u, u.Focus)
+		}
+	}
+	for _, u := range d.Noise {
+		add(u, "generated")
+	}
+	var out []Budget
+	for _, k := range order {
+		if rows[k].Units > 0 {
+			out = append(out, *rows[k])
+		}
+	}
+	return out
 }
 
 // validGroups keeps an AI split only when it covers every hunk exactly once.
@@ -462,32 +640,96 @@ func fileByPath(files []File, p string) *File {
 
 // ---- the AI, part 2: the order ----
 
-const planVoice = `You turn a pull request into a guided walkthrough for its reviewer. Below are its changes as numbered units (a file, or a part of one) with one sentence each, in a first rough order by layer and imports.
-Arrange them into the order a reviewer should read them — from the foundation up: the data and schema first, then the code that reads and writes it, the logic built on it, the API or routes that expose it, the configuration, prompts and integrations that use it, then the screens; each test next to or right after what it tests. Follow the story of the change, not the alphabet.
+// globalsVoice asks for the parts of the walkthrough about the whole pull
+// request; %[1]s is what the numbers in flow and diagram point at.
+const globalsVoice = `Also write, for a reviewer who has never seen this codebase or this pull request — plain words, short, no file paths in the prose:
+- tldr: one sentence of at most 20 words: what this pull request does and for whom
+- overview: 2 or 3 short sentences: the problem and the approach
+- before / after: how it behaves before and after, at most 20 words each
+- flow: a diagram of how the new pieces connect, 2 to 5 stages left to right (where it starts → what it goes through → where it ends up: e.g. triggers → logic → storage → API → screen). Each stage: title of 1 to 3 words, items of 1 to 4 short labels (at most 5 words each, concrete names), steps = the 1-based %[1]s numbers it is about
+- diagram: how data moves through what this pull request adds, as boxes and arrows — 4 to 10 nodes: where it starts (a person or an event), the code that handles it, where it is stored, how it is read back, where people see it. Each node: id, label of at most 4 words (a concrete name), kind (actor, event, code, store, api, ui or external), new (true when this pull request adds it, false for an existing piece it connects to), step (the 1-based %[1]s that has it, 0 when none). Edges: from, to, and a label of 1 to 4 words saying what moves ("+1 per use", "weekly totals"). Follow the data, not the files
+- terms: up to 5 words or names of this codebase a newcomer would not know, each explained in at most 12 words (empty when nothing needs explaining)
+- risks: the most important concerns across the pull request, each with level high, medium or low, a title of at most 8 words, text of at most 30 words, and the unit ids it is about
+- questions: up to 4 short things the reviewer should ask the author
+`
+
+const orderRule = `the order a reviewer should read them — from the foundation up: the data and schema first, then the code that reads and writes it, the logic built on it, the API or routes that expose it, the configuration, prompts and integrations that use it, then the screens; each test next to or right after what it tests. Follow the story of the change, not the alphabet.`
+
+var planVoice = `You turn a pull request into a guided walkthrough for its reviewer. Below are its changes as numbered units (a file, or a part of one) with one sentence each, in a first rough order by layer and imports.
+Arrange them into ` + orderRule + `
 Group the units that belong to one idea into one step: usually 3 to 9 steps, a tiny pull request may have 1 or 2. For each step write:
 - title: short, naming the concrete thing ("Migration for the coupons table", "Routes to create and redeem a coupon")
 - why: one or two short sentences — what this step does in the whole change and what to check
 - units: the unit ids in reading order
 - risks: concrete things in this step worth a careful look (empty when there are none); never generic advice
-Also write, for a reviewer who has never seen this codebase or this pull request — plain words, short, no file paths in the prose:
-- tldr: one sentence of at most 20 words: what this pull request does and for whom
-- overview: 2 or 3 short sentences: the problem and the approach
-- before / after: how it behaves before and after, at most 20 words each
-- flow: a diagram of how the new pieces connect, 2 to 5 stages left to right (where it starts → what it goes through → where it ends up: e.g. triggers → logic → storage → API → screen). Each stage: title of 1 to 3 words, items of 1 to 4 short labels (at most 5 words each, concrete names), steps = the 1-based step numbers it is about
-- diagram: how data moves through what this pull request adds, as boxes and arrows — 4 to 10 nodes: where it starts (a person or an event), the code that handles it, where it is stored, how it is read back, where people see it. Each node: id, label of at most 4 words (a concrete name), kind (actor, event, code, store, api, ui or external), new (true when this pull request adds it, false for an existing piece it connects to), step (the 1-based step that has it, 0 when none). Edges: from, to, and a label of 1 to 4 words saying what moves ("+1 per use", "weekly totals"). Follow the data, not the files
-- terms: up to 5 words or names of this codebase a newcomer would not know, each explained in at most 12 words (empty when nothing needs explaining)
-- risks: the most important concerns across the pull request, each with level high, medium or low, a title of at most 8 words, text of at most 30 words, and the unit ids it is about
-- questions: up to 4 short things the reviewer should ask the author
-Every unit id must appear in exactly one step. Do not invent changes that are not in the units.
+` + fmt.Sprintf(globalsVoice, "step") + `Every unit id must appear in exactly one step. Do not invent changes that are not in the units.
 Answer with JSON only: {"tldr":"…","overview":"…","before":"…","after":"…","flow":[{"title":"…","items":["…"],"steps":[1]}],"diagram":{"nodes":[{"id":"a","label":"…","kind":"code","new":true,"step":2}],"edges":[{"from":"a","to":"b","label":"…"}]},"terms":[{"term":"…","means":"…"}],"steps":[{"title":"…","why":"…","units":["u1"],"risks":["…"]}],"risks":[{"level":"medium","title":"…","text":"…","units":["u3"]}],"questions":["…"]}`
 
-func plan(ctx context.Context, in Input, units []Unit, edges []Edge, ai AI, doc *Doc) error {
+var chapterVoice = `You turn a very large pull request into a guided walkthrough for its reviewer. Below are its changes as numbered units (a file, or a part of one) with one sentence each, in a first rough order by layer and imports.
+Too much for one sitting: first split it into chapters — 3 to 8 parts a reviewer can review one at a time, as if it were a stack of smaller pull requests, in the order to read them. Usually one chapter per feature, integration or area, with what the others build on (shared schema, shared code) first. When the description says features stay behind switches that are off, put the changes that are live without any switch into a chapter of their own, early. Tests go into the chapter of what they test; documentation into the chapter it documents. For each chapter write:
+- title: short, naming the concrete thing ("Google Drive connector", "Shared delivery changes, live without a switch")
+- why: one or two short sentences — what this chapter does in the whole change and what to check
+- units: its unit ids
+- risks: concrete things in it worth a careful look (empty when there are none); never generic advice
+` + fmt.Sprintf(globalsVoice, "chapter") + `Every unit id must appear in exactly one chapter. Do not invent changes that are not in the units.
+Answer with JSON only: {"tldr":"…","overview":"…","before":"…","after":"…","flow":[{"title":"…","items":["…"],"steps":[1]}],"diagram":{"nodes":[{"id":"a","label":"…","kind":"code","new":true,"step":2}],"edges":[{"from":"a","to":"b","label":"…"}]},"terms":[{"term":"…","means":"…"}],"chapters":[{"title":"…","why":"…","units":["u1"],"risks":["…"]}],"risks":[{"level":"medium","title":"…","text":"…","units":["u3"]}],"questions":["…"]}`
+
+var stepVoice = `You turn one chapter of a large pull request into a guided walkthrough for its reviewer. Below are the chapter's changes as numbered units (a file, or a part of one) with one sentence each, in a first rough order by layer and imports.
+Arrange them into ` + orderRule + `
+Group the units that belong to one idea into one step: 2 to 8 steps, at most about 12 units each. For each step write:
+- title: short, naming the concrete thing ("Migration for the coupons table", "Routes to create and redeem a coupon")
+- why: one or two short sentences — what this step does and what to check
+- units: the unit ids in reading order
+- risks: concrete things in this step worth a careful look (empty when there are none); never generic advice
+Every unit id must appear in exactly one step. Do not invent changes that are not in the units.
+Answer with JSON only: {"steps":[{"title":"…","why":"…","units":["u1"],"risks":["…"]}]}`
+
+// groupAnswer is a step or a chapter as the AI wrote it.
+type groupAnswer struct {
+	Title string   `json:"title"`
+	Why   string   `json:"why"`
+	Units []string `json:"units"`
+	Risks []string `json:"risks"`
+}
+
+type planAnswer struct {
+	TLDR string `json:"tldr"`
+	Flow []struct {
+		Title string   `json:"title"`
+		Items []string `json:"items"`
+		Steps []int    `json:"steps"`
+	} `json:"flow"`
+	Terms    []Term        `json:"terms"`
+	Diagram  *Diagram      `json:"diagram"`
+	Overview string        `json:"overview"`
+	Before   string        `json:"before"`
+	After    string        `json:"after"`
+	Steps    []groupAnswer `json:"steps"`
+	Chapters []groupAnswer `json:"chapters"`
+	Risks    []struct {
+		Level string   `json:"level"`
+		Title string   `json:"title"`
+		Text  string   `json:"text"`
+		Units []string `json:"units"`
+	} `json:"risks"`
+	Questions []string `json:"questions"`
+}
+
+// planPrompt is the list of units the AI orders; chapter is set when only
+// one chapter of a large pull request is being ordered.
+func planPrompt(in Input, units []Unit, edges []Edge, sumLen int, chapter *Step) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Pull request: %s\nBranch: %s → %s\n", in.Title, in.HeadRef, in.BaseRef)
 	if b := strings.TrimSpace(in.Body); b != "" {
-		sb.WriteString("Description:\n" + clipText(b, 4000) + "\n")
+		n := 4000
+		if chapter != nil {
+			n = 1500
+		}
+		sb.WriteString("Description:\n" + clipText(b, n) + "\n")
 	}
-	if len(in.Commits) > 0 {
+	if chapter != nil {
+		fmt.Fprintf(&sb, "\nThe chapter to order: %s — %s\n", chapter.Title, chapter.Why)
+	} else if len(in.Commits) > 0 {
 		sb.WriteString("\nCommits, oldest first:\n")
 		for i, c := range in.Commits {
 			if i >= 60 {
@@ -498,12 +740,20 @@ func plan(ctx context.Context, in Input, units []Unit, edges []Edge, ai AI, doc 
 		}
 	}
 	if len(in.AgentOrder) > 0 {
+		has := map[string]bool{}
+		for _, u := range units {
+			has[u.Path] = true
+		}
 		sb.WriteString("\nThe order the coding agent edited the files in:\n")
-		for i, p := range in.AgentOrder {
-			if i >= 120 {
+		n := 0
+		for _, p := range in.AgentOrder {
+			if !has[p] {
+				continue
+			}
+			if n++; n > 120 {
 				break
 			}
-			fmt.Fprintf(&sb, "%d. %s\n", i+1, p)
+			fmt.Fprintf(&sb, "%d. %s\n", n, p)
 		}
 	}
 	if h := strings.TrimSpace(hintsOf(in)); h != "" {
@@ -512,68 +762,51 @@ func plan(ctx context.Context, in Input, units []Unit, edges []Edge, ai AI, doc 
 	sb.WriteString("\nUnits (id | path | layer | change | what it does):\n")
 	id := map[string]string{} // path → first unit id
 	for _, u := range units {
-		f := u.Path
-		if _, ok := id[f]; !ok {
-			id[f] = u.ID
+		if _, ok := id[u.Path]; !ok {
+			id[u.Path] = u.ID
 		}
-		fmt.Fprintf(&sb, "%s | %s | %s | %s\n", u.ID, u.Path, in.Config.LayerName(u.Layer), oneLine(u.Summary, 240))
+		fmt.Fprintf(&sb, "%s | %s | %s | %s\n", u.ID, u.Path, in.Config.LayerName(u.Layer), oneLine(u.Summary, sumLen))
 	}
-	if len(edges) > 0 {
-		sb.WriteString("\nWhich unit uses which (read the used one first):\n")
-		for i, e := range edges {
-			if i >= 300 {
-				break
-			}
-			if a, b := id[e.From], id[e.To]; a != "" && b != "" {
-				fmt.Fprintf(&sb, "%s uses %s\n", a, b)
-			}
+	n := 0
+	for _, e := range edges {
+		a, b := id[e.From], id[e.To]
+		if a == "" || b == "" {
+			continue
 		}
+		if n == 0 {
+			sb.WriteString("\nWhich unit uses which (read the used one first):\n")
+		}
+		if n++; n > 300 {
+			break
+		}
+		fmt.Fprintf(&sb, "%s uses %s\n", a, b)
 	}
-	out, err := ai.Complete(ctx, planVoice+languageLine(in.Language), sb.String(), true)
+	return sb.String()
+}
+
+func askPlan(ctx context.Context, ai AI, system, user string) (*planAnswer, error) {
+	out, err := ai.Complete(ctx, system, user, true)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var res struct {
-		TLDR string `json:"tldr"`
-		Flow []struct {
-			Title string   `json:"title"`
-			Items []string `json:"items"`
-			Steps []int    `json:"steps"`
-		} `json:"flow"`
-		Terms    []Term   `json:"terms"`
-		Diagram  *Diagram `json:"diagram"`
-		Overview string   `json:"overview"`
-		Before   string   `json:"before"`
-		After    string   `json:"after"`
-		Steps    []struct {
-			Title string   `json:"title"`
-			Why   string   `json:"why"`
-			Units []string `json:"units"`
-			Risks []string `json:"risks"`
-		} `json:"steps"`
-		Risks []struct {
-			Level string   `json:"level"`
-			Title string   `json:"title"`
-			Text  string   `json:"text"`
-			Units []string `json:"units"`
-		} `json:"risks"`
-		Questions []string `json:"questions"`
-	}
+	var res planAnswer
 	if err := unmarshalLoose(out, &res); err != nil {
-		return err
+		return nil, err
 	}
-	if len(res.Steps) == 0 {
-		return fmt.Errorf("no steps in the answer")
-	}
+	return &res, nil
+}
+
+// placeUnits turns the AI's groups into steps with every unit exactly once:
+// unknown ids are dropped, repeated ones kept where they came first, and a
+// missing one joins the group that already has that file; the rest come back.
+func placeUnits(groups []groupAnswer, units []Unit, cfg *RepoConfig) ([]Step, []Unit) {
 	byID := map[string]Unit{}
 	for _, u := range units {
 		byID[u.ID] = u
 	}
-	// coverage: every unit exactly once; unknown ids dropped, missing ones
-	// go to the step that already has that file, else to "Everything else"
 	used := map[string]bool{}
 	var steps []Step
-	for _, s := range res.Steps {
+	for _, s := range groups {
 		st := Step{Title: oneLine(s.Title, 120), Why: oneLine(s.Why, 600), Risks: []string{}}
 		for _, id := range s.Units {
 			id = strings.TrimSpace(id)
@@ -593,7 +826,7 @@ func plan(ctx context.Context, in Input, units []Unit, edges []Edge, ai AI, doc 
 			continue
 		}
 		if st.Title == "" {
-			st.Title = in.Config.LayerName(st.Units[0].Layer)
+			st.Title = cfg.LayerName(st.Units[0].Layer)
 		}
 		st.Layer = st.Units[0].Layer
 		steps = append(steps, st)
@@ -620,14 +853,13 @@ func plan(ctx context.Context, in Input, units []Unit, edges []Edge, ai AI, doc 
 			left = append(left, u)
 		}
 	}
-	if len(left) > 0 {
-		steps = append(steps, Step{Title: "Everything else", Why: "Changes the walkthrough did not place in a step above.", Layer: left[0].Layer, Risks: []string{}, Units: left})
-		doc.Warnings = append(doc.Warnings, fmt.Sprintf("%d part(s) the AI left out are under “Everything else”.", len(left)))
-	}
-	if len(steps) == 0 {
-		return fmt.Errorf("the steps had no known units")
-	}
-	doc.Steps = steps
+	return steps, left
+}
+
+// applyGlobals copies what the AI wrote about the whole pull request; the
+// numbers in flow and diagram point at refs things (steps or chapters), and
+// toStep turns one into a 1-based step.
+func applyGlobals(doc *Doc, res *planAnswer, units []Unit, refs int, toStep func(int) int) {
 	doc.TLDR = oneLine(res.TLDR, 240)
 	doc.Overview = strings.TrimSpace(res.Overview)
 	for _, st := range res.Flow {
@@ -640,16 +872,25 @@ func plan(ctx context.Context, in Input, units []Unit, edges []Edge, ai AI, doc 
 				g.Items = append(g.Items, it)
 			}
 		}
+		seen := map[int]bool{}
 		for _, n := range st.Steps {
-			if n >= 1 && n <= len(steps) {
-				g.Steps = append(g.Steps, n)
+			if n >= 1 && n <= refs && !seen[toStep(n)] {
+				seen[toStep(n)] = true
+				g.Steps = append(g.Steps, toStep(n))
 			}
 		}
 		if g.Title != "" || len(g.Items) > 0 {
 			doc.Flow = append(doc.Flow, g)
 		}
 	}
-	doc.Diagram = cleanDiagram(res.Diagram, len(steps))
+	doc.Diagram = cleanDiagram(res.Diagram, refs)
+	if doc.Diagram != nil {
+		for i := range doc.Diagram.Nodes {
+			if n := doc.Diagram.Nodes[i].Step; n > 0 {
+				doc.Diagram.Nodes[i].Step = toStep(n)
+			}
+		}
+	}
 	for _, t := range res.Terms {
 		if t.Term, t.Means = oneLine(t.Term, 60), oneLine(t.Means, 200); t.Term != "" && t.Means != "" && len(doc.Terms) < 6 {
 			doc.Terms = append(doc.Terms, t)
@@ -657,6 +898,10 @@ func plan(ctx context.Context, in Input, units []Unit, edges []Edge, ai AI, doc 
 	}
 	doc.Before = strings.TrimSpace(res.Before)
 	doc.After = strings.TrimSpace(res.After)
+	byID := map[string]bool{}
+	for _, u := range units {
+		byID[u.ID] = true
+	}
 	for _, r := range res.Risks {
 		lvl := strings.ToLower(strings.TrimSpace(r.Level))
 		if lvl != "high" && lvl != "medium" && lvl != "low" {
@@ -664,7 +909,7 @@ func plan(ctx context.Context, in Input, units []Unit, edges []Edge, ai AI, doc 
 		}
 		ids := []string{}
 		for _, id := range r.Units {
-			if _, ok := byID[id]; ok {
+			if byID[id] {
 				ids = append(ids, id)
 			}
 		}
@@ -677,6 +922,104 @@ func plan(ctx context.Context, in Input, units []Unit, edges []Edge, ai AI, doc 
 			doc.Questions = append(doc.Questions, q)
 		}
 	}
+}
+
+func plan(ctx context.Context, in Input, units []Unit, edges []Edge, ai AI, doc *Doc) error {
+	res, err := askPlan(ctx, ai, planVoice+languageLine(in.Language), planPrompt(in, units, edges, 240, nil))
+	if err != nil {
+		return err
+	}
+	if len(res.Steps) == 0 {
+		return fmt.Errorf("no steps in the answer")
+	}
+	steps, left := placeUnits(res.Steps, units, in.Config)
+	if len(left) > 0 {
+		steps = append(steps, Step{Title: "Everything else", Why: "Changes the walkthrough did not place in a step above.", Layer: left[0].Layer, Risks: []string{}, Units: left})
+		doc.Warnings = append(doc.Warnings, fmt.Sprintf("%d part(s) the AI left out are under “Everything else”.", len(left)))
+	}
+	if len(steps) == 0 {
+		return fmt.Errorf("the steps had no known units")
+	}
+	doc.Steps = steps
+	applyGlobals(doc, res, units, len(steps), func(n int) int { return n })
+	return nil
+}
+
+// chapters splits a large pull request into chapters, then orders each
+// chapter into steps of its own (three chapters at a time).
+func chapters(ctx context.Context, in Input, units []Unit, edges []Edge, ai AI, doc *Doc, progress func(string)) error {
+	res, err := askPlan(ctx, ai, chapterVoice+languageLine(in.Language), planPrompt(in, units, edges, 150, nil))
+	if err != nil {
+		return err
+	}
+	groups := res.Chapters
+	if len(groups) == 0 {
+		groups = res.Steps
+	}
+	if len(groups) == 0 {
+		return fmt.Errorf("no chapters in the answer")
+	}
+	chs, left := placeUnits(groups, units, in.Config)
+	if len(left) > 0 {
+		chs = append(chs, Step{Title: "Everything else", Why: "Changes the AI did not place in a chapter above.", Layer: left[0].Layer, Risks: []string{}, Units: left})
+		doc.Warnings = append(doc.Warnings, fmt.Sprintf("%d part(s) the AI left out are in the chapter “Everything else”.", len(left)))
+	}
+	if len(chs) == 0 {
+		return fmt.Errorf("the chapters had no known units")
+	}
+	results := make([][]Step, len(chs))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, parallel)
+	done, failed := 0, 0
+	progress(fmt.Sprintf("Ordering the chapters (0 of %d)", len(chs)))
+	for i := range chs {
+		ch := chs[i]
+		if len(ch.Units) <= 5 {
+			results[i] = []Step{{Title: ch.Title, Why: ch.Why, Layer: ch.Layer, Risks: ch.Risks, Units: ch.Units}}
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			var steps []Step
+			sub, err := askPlan(ctx, ai, stepVoice+languageLine(in.Language), planPrompt(in, ch.Units, edges, 240, &ch))
+			if err == nil && len(sub.Steps) > 0 {
+				var rest []Unit
+				steps, rest = placeUnits(sub.Steps, ch.Units, in.Config)
+				if len(rest) > 0 {
+					steps = append(steps, Step{Title: "More of " + ch.Title, Why: "Changes of this chapter the AI did not place in a step above.", Layer: rest[0].Layer, Risks: []string{}, Units: rest})
+				}
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if len(steps) == 0 {
+				failed++
+				steps = layerSteps(in.Config, ch.Units)
+			}
+			results[i] = steps
+			done++
+			progress(fmt.Sprintf("Ordering the chapters (%d of %d)", done, len(chs)))
+		}(i)
+	}
+	wg.Wait()
+	first := make([]int, len(chs))
+	doc.Steps = nil
+	doc.Chapters = nil
+	for i, steps := range results {
+		first[i] = len(doc.Steps) + 1
+		for _, s := range steps {
+			s.Chapter = i + 1
+			doc.Steps = append(doc.Steps, s)
+		}
+		doc.Chapters = append(doc.Chapters, Chapter{Title: chs[i].Title, Why: chs[i].Why, Risks: chs[i].Risks})
+	}
+	if failed > 0 {
+		doc.Warnings = append(doc.Warnings, fmt.Sprintf("%d chapter(s) are ordered by layer: the AI did not order them.", failed))
+	}
+	applyGlobals(doc, res, units, len(chs), func(n int) int { return first[n-1] })
 	return nil
 }
 

@@ -130,6 +130,9 @@ func (s *Server) makeWalk(ctx context.Context, id int64) {
 		model, used = cl, how
 	}
 	doc, files := walk.Build(ctx, in, model, progress)
+	if p.Commits > len(in.Commits) && len(in.Commits) > 0 {
+		doc.Warnings = append(doc.Warnings, fmt.Sprintf("GitHub lists only the oldest %d of the %d commits; “As it was built” shows those.", len(in.Commits), p.Commits))
+	}
 	if used == "" {
 		doc.Warnings = append([]string{"No AI is set up (Settings → AI), so the files are ordered by layer and have no sentences of their own."}, doc.Warnings...)
 	}

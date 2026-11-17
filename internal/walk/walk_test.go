@@ -249,3 +249,128 @@ func TestMarkdown(t *testing.T) {
 		t.Fatal(md)
 	}
 }
+
+// chapterAI splits a large pull request in two chapters, then each chapter in two steps.
+type chapterAI struct{ chapterCalls, stepCalls int }
+
+func (c *chapterAI) Complete(_ context.Context, system, user string, _ bool) (string, error) {
+	var ids []string
+	for _, l := range strings.Split(user, "\n") {
+		if strings.HasPrefix(l, "u") && strings.Contains(l, " | ") {
+			ids = append(ids, strings.SplitN(l, " ", 2)[0])
+		}
+	}
+	q := func(xs []string) string { b, _ := json.Marshal(xs); return string(b) }
+	switch {
+	case strings.Contains(system, "split it into chapters"):
+		c.chapterCalls++
+		h := len(ids) / 2
+		return fmt.Sprintf(`{"tldr":"t","diagram":{"nodes":[{"id":"a","label":"A","kind":"code","step":2},{"id":"b","label":"B","kind":"store","step":1}],"edges":[{"from":"a","to":"b","label":"x"}]},"chapters":[{"title":"Shared","units":%s},{"title":"Feature","units":%s}]}`, q(ids[:h]), q(ids[h:len(ids)-1])), nil
+	case strings.Contains(system, "one chapter of a large"):
+		c.stepCalls++
+		h := len(ids) / 2
+		return fmt.Sprintf(`{"steps":[{"title":"S1","units":%s},{"title":"S2","units":%s}]}`, q(ids[:h]), q(ids[h:])), nil
+	}
+	type fl struct {
+		Path     string `json:"path"`
+		Summary  string `json:"summary"`
+		Focus    string `json:"focus"`
+		FocusWhy string `json:"focus_why"`
+	}
+	var out struct {
+		Files []fl `json:"files"`
+	}
+	for _, l := range strings.Split(user, "\n") {
+		if strings.HasPrefix(l, "### ") {
+			p := strings.SplitN(strings.TrimPrefix(l, "### "), " (", 2)[0]
+			f := "skim"
+			if strings.Contains(p, "core") {
+				f = "careful"
+			}
+			out.Files = append(out.Files, fl{p, "Changes " + p + ".", f, "because"})
+		}
+	}
+	b, _ := json.Marshal(out)
+	return string(b), nil
+}
+
+func TestBuildChapters(t *testing.T) {
+	in := Input{Title: "Big"}
+	for i := 0; i < 120; i++ {
+		dir := "internal/feature"
+		if i%3 == 0 {
+			dir = "internal/core"
+		}
+		in.Files = append(in.Files, File{Path: fmt.Sprintf("%s/f%03d.go", dir, i), Status: "added", Additions: 2, Patch: "@@ -0,0 +1,2 @@\n+a\n+b"})
+	}
+	in.Files = append(in.Files,
+		File{Path: "internal/core/core_test.go", Status: "added", Additions: 1, Patch: "@@ -0,0 +1 @@\n+t"},
+		File{Path: "packages/db/drizzle/meta/0001_snapshot.json", Status: "added", Additions: 90000, Patch: "@@ -0,0 +1 @@\n+{}"},
+		File{Path: "data/dump.json", Status: "added", Additions: 6000, Patch: "@@ -0,0 +1 @@\n+{}"},
+	)
+	ai := &chapterAI{}
+	doc, files := Build(context.Background(), in, ai, nil)
+	if ai.chapterCalls != 1 || ai.stepCalls != 2 {
+		t.Fatalf("calls: chapters %d, steps %d; warnings %v", ai.chapterCalls, ai.stepCalls, doc.Warnings)
+	}
+	if len(doc.Chapters) != 3 || doc.Chapters[2].Title != "Everything else" {
+		t.Fatalf("chapters %+v", doc.Chapters)
+	}
+	seen := map[string]int{}
+	last := 0
+	for _, s := range doc.Steps {
+		if s.Chapter < last || s.Chapter < 1 {
+			t.Fatalf("steps out of chapter order: %+v", s)
+		}
+		last = s.Chapter
+		for _, u := range s.Units {
+			seen[u.Path]++
+		}
+	}
+	for _, f := range files {
+		if f.Layer == "noise" {
+			continue
+		}
+		if seen[f.Path] != 1 {
+			t.Fatalf("%s appears %d times", f.Path, seen[f.Path])
+		}
+	}
+	if len(doc.Noise) != 2 {
+		t.Fatalf("snapshot and data dump are generated: %+v", doc.Noise)
+	}
+	// the diagram's chapter numbers point at the first step of that chapter
+	if doc.Diagram == nil || doc.Diagram.Nodes[0].Step != 3 || doc.Diagram.Nodes[1].Step != 1 {
+		t.Fatalf("diagram %+v steps %d", doc.Diagram, len(doc.Steps))
+	}
+	focus := map[string]string{}
+	for _, s := range doc.Steps {
+		for _, u := range s.Units {
+			focus[u.Path] = u.Focus
+		}
+	}
+	if focus["internal/core/f000.go"] != "careful" || focus["internal/feature/f001.go"] != "skim" {
+		t.Fatalf("focus %v", focus)
+	}
+	var lines = map[string]int{}
+	for _, b := range doc.Budget {
+		lines[b.Focus] = b.Lines
+	}
+	if lines["careful"] != 81 || lines["generated"] != 96000 {
+		t.Fatalf("budget %+v", doc.Budget)
+	}
+}
+
+func TestGuessFocusWithoutAI(t *testing.T) {
+	in := sample()
+	in.Files = append(in.Files, File{Path: "internal/coupons/service_test.go", Status: "added", Additions: 1, Patch: "@@ -0,0 +1 @@\n+t"})
+	doc, _ := Build(context.Background(), in, nil, nil)
+	got := map[string]string{}
+	for _, s := range doc.Steps {
+		for _, u := range s.Units {
+			got[u.Path] = u.Focus
+		}
+	}
+	if got["db/migrations/1.sql"] != "careful" || got["internal/coupons/service_test.go"] != "trust" || got["internal/api/coupons.go"] != "" {
+		t.Fatalf("focus %v", got)
+	}
+}
