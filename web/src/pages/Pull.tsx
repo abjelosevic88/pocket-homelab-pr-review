@@ -197,7 +197,7 @@ export default function Pull() {
   const markTrusted = (units: Unit[]) => { const todo = units.filter(u => isTrust(u) && u.hashes.length > 0 && !unitDone(u, viewed)); if (todo.length) setViewed(todo, true) }
   const hunksUrl = page?.walkthrough ? `${V1}/pulls/${id}/walkthroughs/${page.walkthrough.id}/hunks?path=` : ''
   const copyMd = async () => { try { const md = await api.getText(`${V1}/pulls/${id}/walkthrough.md${v ? `?v=${v}` : ''}`); toast(await copyText(md) ? 'Copied as Markdown' : 'Could not copy', 'ok') } catch (e) { toast(errMsg(e), 'err') } }
-  const postMd = async () => { try { const r = await api.post<{ url: string }>(`${V1}/pulls/${id}/walkthrough/post`); toast('Posted on the pull request'); window.open(r.url, '_blank', 'noopener') } catch (e) { toast(errMsg(e), 'err') } }
+  const postMd = async () => { try { const r = await api.post<{ url: string }>(`${V1}/pulls/${id}/walkthrough/post`); toast('Posted on the pull request', 'ok', r.url ? { label: 'Open on GitHub', run: () => window.open(r.url, '_blank', 'noopener') } : undefined) } catch (e) { toast(errMsg(e), 'err') } }
   const markAndNext = () => {
     if (stepIdx < 0) { if (steps[0]) goStep(steps[0].key); return }
     const s = steps[stepIdx]
@@ -319,7 +319,7 @@ export default function Pull() {
 
       <AIDock pull={p} dock={dock} mobile={mobile} />
       {modal === 'review' && <ReviewModal pull={p} drafts={drafts} canSend={page.github.connected} demo={!!settings?.demo} onClose={() => setModal(null)} onRemove={actions.onDelete}
-        onSent={url => { setModal(null); toast(settings?.demo ? 'Review saved (the demo does not send it)' : 'Review sent to GitHub'); if (url) window.open(url, '_blank', 'noopener'); load(); loadThreads(true); announceChange() }} />}
+        onSent={url => { setModal(null); toast(settings?.demo ? 'Review saved (the demo does not send it)' : 'Review sent to GitHub', 'ok', url ? { label: 'Open on GitHub', run: () => window.open(url, '_blank', 'noopener') } : undefined); load(); loadThreads(true); announceChange() }} />}
       {modal === 'agent' && <AgentModal pull={p} onClose={() => setModal(null)} />}
       {modal === 'ask' && doc && <AskModal pullId={p.id} step={stepIdx >= 0 ? steps[stepIdx] : undefined} onClose={() => setModal(null)} />}
       {modal === 'warnings' && doc && <Modal title="Notes on this walkthrough" onClose={() => setModal(null)}><ul className="warn-list">{doc.warnings.map((x, i) => <li key={i}>{x}</li>)}</ul></Modal>}
