@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -439,21 +440,44 @@ func (s *Server) handlePullStatus(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"status": nil, "error": err.Error()})
 		return
 	}
-	key := fmt.Sprintf("status:%d:%d", uid, p.ID)
-	if v, at, ok := s.store.CacheGet(ctx, key); ok && !queryBool(r, "fresh") {
-		if t, err := time.Parse(time.RFC3339Nano, at); err == nil && time.Since(t) < time.Minute {
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			_, _ = w.Write([]byte(v))
-			return
-		}
+	maxAge := time.Minute
+	if queryBool(r, "fresh") {
+		maxAge = 0
 	}
-	status, err := gh.PullStatus(ctx, p.Repo, p.Number)
+	cs, err := s.cachedStatus(ctx, gh, uid, p, maxAge)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"status": nil, "error": err.Error()})
 		return
 	}
-	b, _ := json.Marshal(map[string]any{"status": status, "checked_at": time.Now().UTC().Format(time.RFC3339)})
+	writeJSON(w, http.StatusOK, cs)
+}
+
+// cachedStatus is a pull request's GitHub status, read again when the kept
+// one is older than maxAge.
+type statusOut struct {
+	Status    *github.Status `json:"status"`
+	CheckedAt string         `json:"checked_at"`
+}
+
+func (s *Server) cachedStatus(ctx context.Context, gh *github.Client, uid int64, p *store.Pull, maxAge time.Duration) (*statusOut, error) {
+	key := fmt.Sprintf("status:%d:%d", uid, p.ID)
+	if v, at, ok := s.store.CacheGet(ctx, key); ok && maxAge > 0 {
+		if t, err := time.Parse(time.RFC3339Nano, at); err == nil && time.Since(t) < maxAge {
+			var out statusOut
+			if json.Unmarshal([]byte(v), &out) == nil && out.Status != nil {
+				return &out, nil
+			}
+		}
+	}
+	if gh == nil {
+		return nil, errNoGitHub
+	}
+	status, err := gh.PullStatus(ctx, p.Repo, p.Number)
+	if err != nil {
+		return nil, err
+	}
+	out := &statusOut{Status: status, CheckedAt: time.Now().UTC().Format(time.RFC3339)}
+	b, _ := json.Marshal(out)
 	_ = s.store.CachePut(ctx, key, string(b))
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_, _ = w.Write(b)
+	return out, nil
 }

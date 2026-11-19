@@ -14,6 +14,7 @@ import Inbox from './pages/Inbox'
 import Pull from './pages/Pull'
 import StackReview from './pages/StackReview'
 import Reviews from './pages/Reviews'
+import Board from './pages/Board'
 import Settings from './pages/Settings'
 
 function Gate({ children }: { children: React.ReactNode }) {
@@ -34,7 +35,7 @@ function App() {
       <Route element={<Gate><ErrorBoundary where="pr-review"><Layout /></ErrorBoundary></Gate>}>
         <Route path="/" element={<Inbox view="waiting" />} />
         <Route path="/open" element={<Inbox view="open" />} />
-        <Route path="/mine" element={<Inbox view="mine" />} />
+        <Route path="/mine" element={<Board />} />
         <Route path="/done" element={<Inbox view="done" />} />
         <Route path="/archived" element={<Inbox view="archived" />} />
         <Route path="/repo/:owner/:name" element={<Inbox view="repo" />} />

@@ -755,6 +755,11 @@ func demoStatus(p *store.Pull) *github.Status {
 			{Name: "CodeRabbit", Result: "passed", Detail: "SUCCESS", URL: p.URL},
 			{Name: "Vercel – preview", Result: "passed", Detail: "SUCCESS", URL: p.URL},
 		}}}
+	if p.Number == 139 { // CI still running, one conversation open
+		st.MergeState, st.Behind, st.ReviewDecision, st.Approved, st.Requested, st.Threads, st.Unresolved = "BLOCKED", 0, "REVIEW_REQUIRED", []string{}, []string{"dino"}, 2, 1
+		st.Checks = github.Checks{Known: true, State: "PENDING", Passed: 3, Running: 2, Items: []github.Check{{Name: "CI / e2e", Result: "running", Detail: "IN_PROGRESS"}, {Name: "CI / test", Result: "running", Detail: "QUEUED"}, {Name: "CI / build", Result: "passed", Detail: "SUCCESS"}, {Name: "CI / lint", Result: "passed", Detail: "SUCCESS"}, {Name: "CI / typecheck", Result: "passed", Detail: "SUCCESS"}}}
+		return st
+	}
 	if p.Number != 142 {
 		st.MergeState, st.Behind, st.ReviewDecision, st.Approved, st.Requested, st.Unresolved, st.Threads = "CLEAN", 0, "APPROVED", []string{"sara-k"}, []string{}, 0, 1
 		st.Checks = github.Checks{Known: true, State: "SUCCESS", Passed: 4, Items: []github.Check{{Name: "CI / test", Result: "passed", Detail: "SUCCESS"}, {Name: "CI / build", Result: "passed", Detail: "SUCCESS"}, {Name: "CI / lint", Result: "passed", Detail: "SUCCESS"}, {Name: "CI / typecheck", Result: "passed", Detail: "SUCCESS"}}}
