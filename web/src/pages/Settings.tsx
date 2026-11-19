@@ -17,7 +17,7 @@ type TabId = 'github' | 'walk' | 'slack' | 'notify' | 'apps' | 'ai' | 'profile' 
 const TABS: { id: TabId; label: string; icon: string; sub: string }[] = [
   { id: 'github', label: 'GitHub', icon: 'github', sub: 'Your GitHub token, and which pull requests come onto your list by themselves.' },
   { id: 'walk', label: 'Walkthroughs', icon: 'steps', sub: 'When walkthroughs are made, in which language, and hints for the order.' },
-  { id: 'slack', label: 'Slack', icon: 'share', sub: 'The people you @mention in a Slack message, and how Pocket AI writes it. Copied to paste in Slack; nothing is sent from here.' },
+  { id: 'slack', label: 'Slack', icon: 'slack', sub: 'The people you @mention in a Slack message, and how Pocket AI writes it. Copied to paste in Slack; nothing is sent from here.' },
   { id: 'notify', label: 'Notifications', icon: 'bell', sub: 'A push when someone asks for your review, or when a walkthrough is ready.' },
   { id: 'apps', label: 'Connected apps', icon: 'layers', sub: 'Pocket AI: hand your review comments to a coding agent, and see the order an agent edited the files in.' },
   { id: 'ai', label: 'AI', icon: 'sparkles', sub: 'Who writes the walkthroughs and answers your questions: Pocket AI through Core, or your own OpenAI key.' },

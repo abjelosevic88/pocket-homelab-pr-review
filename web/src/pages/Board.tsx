@@ -360,7 +360,7 @@ function BoardRow({ r, news, parent, rail, level = 0 }: { r: Row; news?: { words
             </span>
           </span>
         </button>
-        <button type="button" className="btn ghost icon-only" onClick={() => setSlack(true)} title="Message for Slack: who to ask, a line about it and the link, to copy" aria-label="Message for Slack"><Icon name="share" size={15} /></button>
+        <button type="button" className="btn ghost icon-only" onClick={() => setSlack(true)} title="Message for Slack: who to ask, a line about it and the link, to copy" aria-label="Message for Slack"><Icon name="slack" size={17} /></button>
         <a className="btn ghost icon-only" href={p.url} target="_blank" rel="noreferrer" title="Open on GitHub" aria-label="Open on GitHub"><Icon name="external" size={15} /></a>
       </div>
       {slack && <SlackCopy pull={p} onClose={() => setSlack(false)} />}

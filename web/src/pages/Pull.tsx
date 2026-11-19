@@ -239,7 +239,7 @@ export default function Pull() {
   const allUnits = steps.reduce((n, s) => n + s.units.length, 0)
   const more: MenuItem[] = [
     { label: 'Open on GitHub', icon: 'external', onSelect: () => window.open(p.url, '_blank', 'noopener') },
-    { label: 'Message for Slack', icon: 'share', onSelect: () => setModal('slack') },
+    { label: 'Message for Slack', icon: 'slack', onSelect: () => setModal('slack') },
     { label: 'Copy the walkthrough as Markdown', icon: 'copy', disabled: !doc, onSelect: copyMd },
     ...(doc?.chapters?.length ? [{ label: 'Copy the chapters as a suggested stack', icon: 'copy', onSelect: copyStackPlan } as MenuItem] : []),
     { label: 'Post the walkthrough on the pull request', icon: 'github', disabled: !doc || !page.github.connected || !!settings?.demo, onSelect: postMd },
