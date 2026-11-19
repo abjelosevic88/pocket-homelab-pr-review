@@ -26,7 +26,8 @@ export function describeStatus(st: GHStatus, base: string): { ci: Chip | null; m
     : ck.items.length === 0 ? ['muted', 'No CI', 'No checks reported on the newest commit.']
     : ck.failed > 0 ? ['bad', `${ck.failed} failing${ck.running ? ` · ${ck.running} running` : ''}`, '']
     : ck.running > 0 ? ['warn', `${ck.running} running · ${ck.passed} passed`, '']
-    : ['ok', `${ck.passed} passed`, '']
+    : ck.passed === 0 ? ['muted', `${ck.skipped} skipped`, 'Every check on the newest commit was skipped.']
+    : ['ok', `${ck.passed} passed${ck.skipped ? ` · ${ck.skipped} skipped` : ''}`, '']
 
   const behind = st.behind > 0 ? `${st.behind} commit${st.behind === 1 ? '' : 's'} behind ${base}` : ''
   const merge: Chip = st.state === 'MERGED' ? ['ok', 'Merged', '']

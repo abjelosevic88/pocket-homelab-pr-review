@@ -29,9 +29,58 @@ function health(r: Row): Tone {
   if (ck.failed > 0 || st.changes_requested.length > 0 || st.mergeable === 'CONFLICTING' || st.merge_state === 'DIRTY') return 'bad'
   if (ck.running > 0 || st.unresolved > 0 || st.merge_state === 'BLOCKED' || st.merge_state === 'BEHIND' || st.merge_state === 'UNSTABLE') return 'warn'
   if (st.draft) return 'muted'
+  if (ck.known && ck.passed === 0 && ck.items.length > 0) return 'muted' // every check skipped
   return 'ok'
 }
 const RANK: Record<Tone, number> = { bad: 0, warn: 1, ok: 2, muted: 3 }
+const worst = (ts: Tone[]): Tone => ts.reduce<Tone>((a, t) => RANK[t] < RANK[a] ? t : a, 'muted' as Tone)
+
+// A stack is my pull requests built on each other: B merges into A's branch.
+// Members come bottom first (merge order) on one rail; a second pull request
+// on the same branch is a side branch and steps in one level.
+interface Member { r: Row; level: number; parent?: number }
+interface Group { key: string; members: Member[]; tone: Tone; updated: string }
+
+function groupStacks(rows: Row[]): Group[] {
+  const byHead = new Map(rows.map(r => [`${r.pull.repo}\0${r.pull.head_ref}`, r]))
+  const parentOf = (r: Row) => { const q = byHead.get(`${r.pull.repo}\0${r.pull.base_ref}`); return q && q !== r ? q : undefined }
+  const kids = new Map<number, Row[]>()
+  for (const r of rows) { const q = parentOf(r); if (q) kids.set(q.pull.id, [...(kids.get(q.pull.id) || []), r]) }
+  const out: Group[] = []
+  const seen = new Set<number>()
+  for (const root of rows.filter(r => !parentOf(r))) {
+    const members: Member[] = []
+    const walk = (r: Row, level: number, parent?: number) => {
+      if (seen.has(r.pull.id)) return
+      seen.add(r.pull.id)
+      members.push({ r, level, parent })
+      const ks = (kids.get(r.pull.id) || []).sort((a, b) => a.pull.number - b.pull.number)
+      ks.forEach((k, i) => walk(k, i === 0 ? level : level + 1, r.pull.number))
+    }
+    walk(root, 0)
+    out.push({
+      key: members.length > 1 ? `stack:${root.pull.id}` : `pr:${root.pull.id}`, members,
+      tone: worst(members.map(m => health(m.r))),
+      updated: members.map(m => m.r.pull.gh_updated_at || '').sort().pop() || '',
+    })
+  }
+  // a cycle (branches merging into each other) still shows every row
+  for (const r of rows) if (!seen.has(r.pull.id)) out.push({ key: `pr:${r.pull.id}`, members: [{ r, level: 0 }], tone: health(r), updated: r.pull.gh_updated_at || '' })
+  out.sort((a, b) => RANK[a.tone] - RANK[b.tone] || b.updated.localeCompare(a.updated))
+  return out
+}
+
+const FOLD_KEY = 'pr-review:board-folded'
+function useFolded(): [Set<string>, (k: string) => void] {
+  const [f, setF] = useState<Set<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem(FOLD_KEY) || '[]')) } catch { return new Set() } })
+  const toggle = (k: string) => setF(old => {
+    const n = new Set(old)
+    if (n.has(k)) n.delete(k); else n.add(k)
+    try { localStorage.setItem(FOLD_KEY, JSON.stringify([...n])) } catch {}
+    return n
+  })
+  return [f, toggle]
+}
 
 const is: Record<Exclude<Filter, 'all'>, (r: Row) => boolean> = {
   red: r => !!r.status && r.status.checks.failed > 0,
@@ -119,6 +168,9 @@ export default function Board() {
     return c
   }, [rows])
   const shown = filter === 'all' ? rows : rows.filter(is[filter])
+  const groups = useMemo(() => groupStacks(rows), [rows])
+  const [folded, toggleFold] = useFolded()
+  const stacks = groups.filter(g => g.members.length > 1).length
 
   if (!data) return err ? <div className="callout warn"><Icon name="alert" size={16} /><div>{err}</div></div> : <Loading />
 
@@ -180,10 +232,28 @@ export default function Board() {
         </Empty>
       ) : shown.length === 0 ? (
         <p className="muted small">None right now. <button type="button" className="link-btn" onClick={() => setFilter('all')}>Show all</button></p>
-      ) : (
+      ) : filter !== 'all' ? (
         <ul className="pr-list board-list" aria-label="Your open pull requests">
           {shown.map(r => <BoardRow key={r.pull.id} r={r} news={news[r.pull.id]} />)}
         </ul>
+      ) : (
+        <div className="stack">
+          {stacks > 0 && (
+            <div className="board-fold-all muted small">
+              {stacks} stack{stacks === 1 ? '' : 's'}
+              <button type="button" className="link-btn" onClick={() => {
+                const ks = groups.filter(g => g.members.length > 1).map(g => g.key)
+                const allFolded = ks.every(k => folded.has(k))
+                ks.forEach(k => { if (folded.has(k) === allFolded) toggleFold(k) })
+              }}>{groups.filter(g => g.members.length > 1).every(g => folded.has(g.key)) ? 'Open all' : 'Fold all'}</button>
+            </div>
+          )}
+          {blocks(groups).map(b => b.stack
+            ? <StackGroup key={b.stack.key} g={b.stack} folded={folded.has(b.stack.key)} onToggle={() => toggleFold(b.stack!.key)} news={news} />
+            : <ul key={b.singles[0].key} className="pr-list board-list" aria-label="Your open pull requests">
+                {b.singles.map(g => <BoardRow key={g.key} r={g.members[0].r} news={news[g.members[0].r.pull.id]} />)}
+              </ul>)}
+        </div>
       )}
 
       {data.done.length > 0 && (
@@ -198,17 +268,80 @@ export default function Board() {
   )
 }
 
-function BoardRow({ r, news }: { r: Row; news?: { words: string[]; at: number } }) {
+// stacks get a card each; the single pull requests between them share one list
+function blocks(groups: Group[]): { stack?: Group; singles: Group[] }[] {
+  const out: { stack?: Group; singles: Group[] }[] = []
+  for (const g of groups) {
+    if (g.members.length > 1) out.push({ stack: g, singles: [] })
+    else if (out.length && !out[out.length - 1].stack) out[out.length - 1].singles.push(g)
+    else out.push({ singles: [g] })
+  }
+  return out
+}
+
+function StackGroup({ g, folded, onToggle, news }: { g: Group; folded: boolean; onToggle: () => void; news: Record<number, { words: string[]; at: number }> }) {
+  const root = g.members[0].r.pull
+  const sts = g.members.map(m => m.r.status).filter((x): x is GHStatus => !!x)
+  const failing = g.members.filter(m => is.red(m.r)).length
+  const running = g.members.filter(m => is.running(m.r)).length
+  const unresolved = sts.reduce((n, s) => n + s.unresolved, 0)
+  const conflicts = sts.filter(s => s.mergeable === 'CONFLICTING' || s.merge_state === 'DIRTY').length
+  const changes = g.members.filter(m => is.changes(m.r)).length
+  const sum: [Tone, string, string][] = []
+  if (failing) sum.push(['bad', 'x-circle', `${failing} CI failing`])
+  if (conflicts) sum.push(['bad', 'branch', `${conflicts} with conflicts`])
+  if (changes) sum.push(['bad', 'users', `${changes} changes asked`])
+  if (running) sum.push(['warn', 'clock', `${running} CI running`])
+  if (unresolved) sum.push(['warn', 'message', `${unresolved} unresolved`])
+  if (!sum.length && sts.length === g.members.length) sum.push(['ok', 'check-circle', 'CI green, nothing unresolved'])
+  return (
+    <section className={`board-stack ${folded ? 'folded' : ''}`} data-tone={g.tone} aria-label={`Stack of ${g.members.length} on ${root.base_ref}`}>
+      <div className="board-stack-h">
+        <button type="button" className="board-stack-toggle" onClick={onToggle} aria-expanded={!folded}>
+          <Icon name={folded ? 'chevron-right' : 'chevron-down'} size={16} />
+          <span className="board-health sm" data-tone={g.tone}><Icon name="layers" size={15} /></span>
+          <span className="board-stack-t">
+            <span className="board-stack-title">Stack of {g.members.length} <span className="muted">· {root.repo} · on <span className="mono-sm">{root.base_ref}</span></span></span>
+            <span className="board-stack-sum">
+              {sum.map(([t, ic, w]) => <span key={w} className={`ghs-chip plain ${t}`}><Icon name={ic} size={12} />{w}</span>)}
+            </span>
+          </span>
+        </button>
+        <Link to={`/pr/${root.id}/stack`} className="btn ghost sm hide-mobile" title="Review the stack, bottom first">Review the stack</Link>
+      </div>
+      {folded ? (
+        <div className="board-stack-dots" aria-label="In this stack">
+          {g.members.map(m => (
+            <Link key={m.r.pull.id} to={`/pr/${m.r.pull.id}`} className="board-dot" data-tone={health(m.r)} title={m.r.pull.title}>
+              <span className="board-dot-i" aria-hidden />#{m.r.pull.number}
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <ul className="pr-list board-list" aria-label="Pull requests in the stack, bottom first">
+          {g.members.map((m, i) => <BoardRow key={m.r.pull.id} r={m.r} news={news[m.r.pull.id]} parent={m.parent} rail={i === 0 ? 'first' : i === g.members.length - 1 ? 'last' : 'mid'} level={m.level} />)}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+function BoardRow({ r, news, parent, rail, level = 0 }: { r: Row; news?: { words: string[]; at: number }; parent?: number; rail?: 'first' | 'mid' | 'last'; level?: number }) {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const p = r.pull, st = r.status
   const tone = health(r)
   const fresh = news && Date.now() - news.at < 10 * 60_000
-  const d = st ? describeStatus(st, p.base_ref) : null
+  // a stacked one's base is a long branch name; its tail is enough here (the whole name is in the title)
+  const base = p.base_ref.length > 28 ? '…' + p.base_ref.slice(-26) : p.base_ref
+  const d = st ? describeStatus(st, base) : null
   const failing = st ? st.checks.items.filter(c => c.result === 'failed') : []
   const chipIcon = (t: Tone) => t === 'ok' ? 'check-circle' : t === 'bad' ? 'x-circle' : t === 'warn' ? 'clock' : 'circle'
   return (
     <li className={`board-row ${fresh ? 'fresh' : ''}`} data-tone={tone}>
+      <div className="board-tree">
+      {rail && <span className={`btg ${rail}`} data-tone={tone} aria-hidden />}
+      <div className="board-cell" style={level ? { paddingLeft: level * 22 } : undefined}>
       <div className="board-top">
         <button type="button" className="pr-main" onClick={() => navigate(`/pr/${p.id}`)}>
           <span className={`board-health ${tone}`} title={tone === 'bad' ? 'Needs you' : tone === 'warn' ? 'Waiting on something' : tone === 'ok' ? 'All good' : 'Not known yet'}>
@@ -218,6 +351,7 @@ function BoardRow({ r, news }: { r: Row; news?: { words: string[]; at: number } 
             <span className="pr-title">{p.title}{(p.draft || st?.draft) && <span className="badge sm">draft</span>}</span>
             <span className="pr-meta muted small">
               <span>{p.repo}#{p.number}</span>
+              {parent && <span className="board-on" title={`Merges into #${parent}'s branch`}>on #{parent}</span>}
               <span className="hide-mobile mono-sm">{p.head_ref}</span>
               {p.gh_updated_at && <span>{ago(p.gh_updated_at)}</span>}
               <span className="tnum"><span className="add">+{p.additions}</span> <span className="del">−{p.deletions}</span></span>
@@ -242,7 +376,7 @@ function BoardRow({ r, news }: { r: Row; news?: { words: string[]; at: number } 
             ? <a role="listitem" className={`ghs-chip ${d.conv[0]}`} href={p.url} target="_blank" rel="noreferrer" title={d.conv[2] || 'Open the conversations on GitHub'}><Icon name="message" size={13} />{d.conv[1]}</a>
             : <span role="listitem" className="ghs-chip muted"><Icon name="message" size={13} />No conversations</span>}
           <span role="listitem" className={`ghs-chip ${d.rv[0]}`} title={d.rv[2]}><Icon name="users" size={13} />{d.rv[1]}</span>
-          <span role="listitem" className={`ghs-chip ${d.merge[0]}`} title={d.merge[2]}><Icon name={st.state === 'MERGED' ? 'check-circle' : 'branch'} size={13} />{d.merge[1]}</span>
+          <span role="listitem" className={`ghs-chip ${d.merge[0]}`} title={[d.merge[2], `Merges into ${p.base_ref}`].filter(Boolean).join('\n')}><Icon name={st.state === 'MERGED' ? 'check-circle' : 'branch'} size={13} />{d.merge[1]}</span>
         </div>
       )}
 
@@ -256,6 +390,8 @@ function BoardRow({ r, news }: { r: Row; news?: { words: string[]; at: number } 
         </div>
       )}
       {open && st && st.checks.items.length > 0 && <div className="board-checks"><ChecksList items={st.checks.items} /></div>}
+      </div>
+      </div>
     </li>
   )
 }
