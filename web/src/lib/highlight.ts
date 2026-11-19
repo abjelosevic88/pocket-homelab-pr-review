@@ -31,7 +31,34 @@ import xml from 'highlight.js/lib/languages/xml'
 import yaml from 'highlight.js/lib/languages/yaml'
 import type { Line } from './types'
 
-const LANGS = { bash, c, cpp, csharp, css, dockerfile, go, graphql, ini, java, javascript, json, kotlin, makefile, markdown, php, protobuf, python, ruby, rust, scss, sql, swift, typescript, xml, yaml }
+type LangFn = typeof javascript
+
+// highlight.js's JS/TS class-name rule has no word boundary at its end, so in
+// SHIP24_MAX_REQUESTS it takes "SHIP24" as a class and leaves the rest plain.
+// Requiring the name to end there lets the whole word fall to the
+// UPPER_CASE constant rule instead.
+function wholeClassNames(def: LangFn): LangFn {
+  return h => {
+    const lang = def(h)
+    const seen = new Set<object>()
+    const walk = (m: unknown) => {
+      if (!m || typeof m !== 'object' || seen.has(m)) return
+      seen.add(m)
+      const mode = m as { scope?: string; className?: string; match?: RegExp | string; contains?: unknown[]; variants?: unknown[]; starts?: unknown }
+      if ((mode.className ?? mode.scope) === 'title.class' && mode.match) {
+        const src = typeof mode.match === 'string' ? mode.match : mode.match.source
+        if (src.includes('\\bJSON')) mode.match = new RegExp(`(?:${src})(?![\\w$])`)
+      }
+      mode.contains?.forEach(walk)
+      mode.variants?.forEach(walk)
+      walk(mode.starts)
+    }
+    walk(lang)
+    return lang
+  }
+}
+
+const LANGS: Record<string, LangFn> = { bash, c, cpp, csharp, css, dockerfile, go, graphql, ini, java, javascript: wholeClassNames(javascript), json, kotlin, makefile, markdown, php, protobuf, python, ruby, rust, scss, sql, swift, typescript: wholeClassNames(typescript), xml, yaml }
 for (const [name, def] of Object.entries(LANGS)) hljs.registerLanguage(name, def)
 hljs.registerAliases(['ts', 'tsx'], { languageName: 'typescript' })
 hljs.registerAliases(['js', 'jsx'], { languageName: 'javascript' })
