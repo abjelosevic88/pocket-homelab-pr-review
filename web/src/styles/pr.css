@@ -751,3 +751,27 @@ button.ghs-chip:not(:disabled):hover, a.ghs-chip:hover { background: var(--hover
   .board-chips, .board-news, .board-failing, .board-checks { margin-left: 14px; }
   .board-chips .ghs-chip { height: 24px; font-size: 12px; }
 }
+
+/* message for Slack (copied, not sent) */
+.chip-toggle { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--text-2, var(--text)); font: inherit; font-size: 13px; cursor: pointer; }
+.chip-toggle:hover { background: var(--surface-2); }
+.chip-toggle.on { background: color-mix(in srgb, #1264a3 12%, transparent); border-color: color-mix(in srgb, #1264a3 45%, transparent); color: #1264a3; font-weight: 600; }
+.chip-toggle.add { border-style: dashed; color: var(--muted); }
+.slack-chips { gap: 8px; }
+.slack-lab { display: inline-flex; align-items: center; gap: 12px; }
+.slack-lab .link-btn { font-weight: 500; }
+.slack-add { display: grid; grid-template-columns: 1.3fr 1fr 1fr auto; gap: 8px; align-items: center; margin-top: 8px; }
+.slack-people { display: grid; gap: 6px; }
+.slack-people-h, .slack-person { display: grid; grid-template-columns: 1.3fr 1fr 1fr 32px; gap: 8px; align-items: center; }
+.slack-how { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.slack-preview { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); font-size: 13.5px; }
+.slack-preview p { margin: 4px 0 6px; white-space: pre-wrap; }
+.slack-preview-h { font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.slack-mention { background: color-mix(in srgb, #1264a3 12%, transparent); color: #1264a3; border-radius: 4px; padding: 0 3px; font-weight: 600; }
+.slack-preview a { color: #1264a3; word-break: break-all; }
+@media (max-width: 640px) {
+  .slack-add, .slack-people-h, .slack-person { grid-template-columns: 1fr; }
+  .slack-people-h { display: none; }
+  .slack-person { padding-bottom: 8px; border-bottom: 1px solid var(--border); grid-template-columns: 1fr 1fr 32px; }
+  .slack-person > input:first-child { grid-column: 1 / -1; }
+}

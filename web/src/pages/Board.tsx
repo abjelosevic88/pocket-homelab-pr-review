@@ -10,6 +10,7 @@ import { openAdd } from '../components/Layout'
 import { Icon } from '../components/icons'
 import { ChecksList, describeStatus, type GHStatus, type Tone } from '../components/PullStatus'
 import { Empty, Loading, Spinner, errMsg, useToast } from '../components/ui'
+import { SlackCopy } from '../components/SlackCopy'
 
 interface Row { pull: Pull; status: GHStatus | null; checked_at: string; error?: string }
 interface BoardData {
@@ -329,6 +330,7 @@ function StackGroup({ g, folded, onToggle, news }: { g: Group; folded: boolean; 
 function BoardRow({ r, news, parent, rail, level = 0 }: { r: Row; news?: { words: string[]; at: number }; parent?: number; rail?: 'first' | 'mid' | 'last'; level?: number }) {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
+  const [slack, setSlack] = useState(false)
   const p = r.pull, st = r.status
   const tone = health(r)
   const fresh = news && Date.now() - news.at < 10 * 60_000
@@ -358,8 +360,10 @@ function BoardRow({ r, news, parent, rail, level = 0 }: { r: Row; news?: { words
             </span>
           </span>
         </button>
+        <button type="button" className="btn ghost icon-only" onClick={() => setSlack(true)} title="Message for Slack: who to ask, a line about it and the link, to copy" aria-label="Message for Slack"><Icon name="share" size={15} /></button>
         <a className="btn ghost icon-only" href={p.url} target="_blank" rel="noreferrer" title="Open on GitHub" aria-label="Open on GitHub"><Icon name="external" size={15} /></a>
       </div>
+      {slack && <SlackCopy pull={p} onClose={() => setSlack(false)} />}
 
       {fresh && <div className="board-news"><Icon name="zap" size={12} />{news!.words.join(' · ')} <span className="muted">{ago(new Date(news!.at).toISOString())}</span></div>}
 

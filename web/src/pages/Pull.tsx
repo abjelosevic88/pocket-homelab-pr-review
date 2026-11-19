@@ -20,6 +20,7 @@ import { AIDock, Conversations, useAIDock } from '../components/AIDock'
 import { AIMark } from '../components/AIMark'
 import { Empty, Loading, MenuButton, type MenuItem, Modal, Segmented, Spinner, copyText, errMsg, modalOpen, useIsMobile, useToast } from '../components/ui'
 import { WalkPill, reviewBadge } from './Inbox'
+import { SlackCopy } from '../components/SlackCopy'
 
 const OVERVIEW = 'overview'
 
@@ -111,7 +112,7 @@ export default function Pull() {
   dockRef.current = dock
   const [err, setErr] = useState('')
   const [threads, setThreads] = useState<Thread[]>([])
-  const [modal, setModal] = useState<'review' | 'agent' | 'ask' | 'warnings' | null>(null)
+  const [modal, setModal] = useState<'review' | 'agent' | 'ask' | 'warnings' | 'slack' | null>(null)
   const [hideTrusted, setHideTrusted] = useHideTrusted()
   const stackInfo = useStack(page?.pull.id, !!page?.github.connected && !settings?.demo)
   const v = sp.get('v')
@@ -238,6 +239,7 @@ export default function Pull() {
   const allUnits = steps.reduce((n, s) => n + s.units.length, 0)
   const more: MenuItem[] = [
     { label: 'Open on GitHub', icon: 'external', onSelect: () => window.open(p.url, '_blank', 'noopener') },
+    { label: 'Message for Slack', icon: 'share', onSelect: () => setModal('slack') },
     { label: 'Copy the walkthrough as Markdown', icon: 'copy', disabled: !doc, onSelect: copyMd },
     ...(doc?.chapters?.length ? [{ label: 'Copy the chapters as a suggested stack', icon: 'copy', onSelect: copyStackPlan } as MenuItem] : []),
     { label: 'Post the walkthrough on the pull request', icon: 'github', disabled: !doc || !page.github.connected || !!settings?.demo, onSelect: postMd },
@@ -321,6 +323,7 @@ export default function Pull() {
       {modal === 'review' && <ReviewModal pull={p} drafts={drafts} canSend={page.github.connected} demo={!!settings?.demo} onClose={() => setModal(null)} onRemove={actions.onDelete}
         onSent={url => { setModal(null); toast(settings?.demo ? 'Review saved (the demo does not send it)' : 'Review sent to GitHub', 'ok', url ? { label: 'Open on GitHub', run: () => window.open(url, '_blank', 'noopener') } : undefined); load(); loadThreads(true); announceChange() }} />}
       {modal === 'agent' && <AgentModal pull={p} onClose={() => setModal(null)} />}
+      {modal === 'slack' && <SlackCopy pull={p} onClose={() => setModal(null)} />}
       {modal === 'ask' && doc && <AskModal pullId={p.id} step={stepIdx >= 0 ? steps[stepIdx] : undefined} onClose={() => setModal(null)} />}
       {modal === 'warnings' && doc && <Modal title="Notes on this walkthrough" onClose={() => setModal(null)}><ul className="warn-list">{doc.warnings.map((x, i) => <li key={i}>{x}</li>)}</ul></Modal>}
     </div>

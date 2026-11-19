@@ -215,6 +215,18 @@ type Settings struct {
 	OpenAIKey     string `json:"openai_api_key"`
 	OpenAIModel   string `json:"openai_model"`
 	OpenAIBaseURL string `json:"openai_base_url"`
+
+	// A message for Slack (copied, never sent from here): the people to
+	// @mention and how Pocket AI writes the line.
+	SlackPeople []SlackPerson `json:"slack_people"`
+	SlackPrompt string        `json:"slack_prompt"`
+}
+
+// SlackPerson is someone to @mention in a copied Slack message.
+type SlackPerson struct {
+	Name   string `json:"name"`             // as Slack shows them: "Jasenko Rakovic"
+	Handle string `json:"handle,omitempty"` // their Slack handle, when @Name does not find them
+	GitHub string `json:"github,omitempty"` // their GitHub login, to pick them when GitHub waits on them
 }
 
 func itoa(n int) string {

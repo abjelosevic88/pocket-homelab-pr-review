@@ -60,6 +60,8 @@ func (s *Server) Router() http.Handler {
 			r.Post("/sync", s.handleSyncNow)
 			r.Get("/reviews", s.handleReviews)
 			r.Get("/mine/board", s.handleMineBoard)
+			r.Get("/slack", s.handleGetSlack)
+			r.Put("/slack", s.handlePutSlack)
 			r.Get("/github/repos", s.handleGitHubRepos)
 			r.Get("/github/pulls", s.handleGitHubPulls)
 
@@ -92,6 +94,7 @@ func (s *Server) Router() http.Handler {
 			r.Delete("/pulls/{id}/comments/{cid}", s.handleDeleteComment)
 			r.Post("/pulls/{id}/review", s.handleSubmitReview)
 			r.Post("/pulls/{id}/ask", s.handleAskPull)
+			r.Post("/pulls/{id}/slack/draft", s.handleSlackDraft)
 
 			// a coding agent (Pocket AI)
 			r.Get("/agent/options", s.handleAgentOptions)
