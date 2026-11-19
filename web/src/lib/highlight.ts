@@ -115,12 +115,41 @@ function toLines(html: string): Token[][] {
   return lines
 }
 
+const SKIP = /\bhljs-(string|comment|regexp)\b/
+const DECL = new Set(['const', 'let', 'var'])
+
+/** highlight.js colours every `name:` as an object key, so in TypeScript the
+ * name in `const x: T` and the parameters in `(req: Request)` got the key
+ * colour too. Here a `name:` stays a key unless it comes right after
+ * const/let/var or sits straight inside ( ). Brackets are counted only
+ * within the hunk, so a hunk that starts inside an object keeps its keys. */
+function plainTypedNames(lines: Token[][]) {
+  const open: string[] = []
+  let prev: Token | undefined // last token that isn't blank
+  for (const line of lines) {
+    for (const t of line) {
+      const cls = t.c.split(' ')
+      if (cls.includes('hljs-attr')) {
+        const afterDecl = !!prev && prev.c.split(' ').includes('hljs-keyword') && DECL.has(prev.s.trim())
+        if (afterDecl || open[open.length - 1] === '(') t.c = cls.filter(c => c !== 'hljs-attr').join(' ')
+      } else if (!SKIP.test(t.c)) {
+        for (const ch of t.s) {
+          if (ch === '(' || ch === '[' || ch === '{') open.push(ch)
+          else if (ch === ')' || ch === ']' || ch === '}') open.pop()
+        }
+      }
+      if (t.s.trim()) prev = t
+    }
+  }
+}
+
 function side(lines: Line[], keep: (l: Line) => boolean, lang: string, out: Map<number, Token[]>) {
   const idx: number[] = []
   const text: string[] = []
   lines.forEach((l, i) => { if (keep(l)) { idx.push(i); text.push(l.s) } })
   if (idx.length === 0) return
   const toks = toLines(hljs.highlight(text.join('\n'), { language: lang, ignoreIllegals: true }).value)
+  if (lang === 'typescript' || lang === 'javascript') plainTypedNames(toks)
   idx.forEach((li, k) => { if (!out.has(li)) out.set(li, toks[k] || []) })
 }
 
