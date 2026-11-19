@@ -775,3 +775,5 @@ button.ghs-chip:not(:disabled):hover, a.ghs-chip:hover { background: var(--hover
   .slack-person { padding-bottom: 8px; border-bottom: 1px solid var(--border); grid-template-columns: 1fr 1fr 32px; }
   .slack-person > input:first-child { grid-column: 1 / -1; }
 }
+.slack-person.new input:first-child { border-style: dashed; }
+.slack-paste { display: grid; gap: 8px; }

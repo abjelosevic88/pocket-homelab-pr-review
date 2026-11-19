@@ -2,6 +2,7 @@
 // person picks who to @mention, edits, and copies it with the link to paste
 // in Slack. Nothing is sent from here; the people are kept in this app.
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { Icon } from './icons'
 import type { GHStatus } from './PullStatus'
@@ -27,7 +28,6 @@ export function SlackCopy({ pull, onClose }: { pull: SlackPull; onClose: () => v
   const [text, setText] = useState('')
   const [picked, setPicked] = useState<string[]>([])
   const [writing, setWriting] = useState(false)
-  const [editing, setEditing] = useState(false)
   const [adding, setAdding] = useState(false)
   const [how, setHow] = useState<string | null>(null)
   const [err, setErr] = useState('')
@@ -90,11 +90,9 @@ export function SlackCopy({ pull, onClose }: { pull: SlackPull; onClose: () => v
       {err && <div className="callout warn"><Icon name="alert" size={15} /><span>{err}</span></div>}
       <div className="stack">
         <Field group label={<span className="slack-lab">Mention
-          {people.length > 0 && <button type="button" className="link-btn small" onClick={() => { setEditing(e => !e); setAdding(false) }}>{editing ? 'Done' : 'Edit people'}</button>}
-        </span>} help={people.length > 0 && !editing ? 'Slack turns @Name into a mention when it matches their name; if one stays plain, give them their Slack handle under Edit people.' : undefined}>
-          {!conf ? <div className="row muted small"><Spinner size={12} />…</div> : editing ? (
-            <PeopleEditor people={people} onSave={async l => { if (await savePeople(l)) setEditing(false) }} />
-          ) : (
+          <Link to="/settings/slack" className="link-btn small" onClick={onClose}>{people.length ? 'Your people' : 'Add your people'}</Link>
+        </span>} help={people.length > 0 ? 'Slack turns @Name into a mention when it matches their name; if one stays plain, give them their Slack handle in Settings → Slack.' : 'Add the people you work with once in Settings → Slack (or one here), then just pick them.'}>
+          {!conf ? <div className="row muted small"><Spinner size={12} />…</div> : (
             <div className="row wrap slack-chips" role="group" aria-label="People to mention">
               {people.map(p => {
                 const on = picked.includes(p.name)
@@ -104,7 +102,7 @@ export function SlackCopy({ pull, onClose }: { pull: SlackPull; onClose: () => v
               {!adding && <button type="button" className="chip-toggle add" onClick={() => setAdding(true)}><Icon name="plus" size={13} />{people.length ? 'Someone else' : 'Add who to mention'}</button>}
             </div>
           )}
-          {adding && !editing && <AddPerson onCancel={() => setAdding(false)} onAdd={async p => {
+          {adding && <AddPerson onCancel={() => setAdding(false)} onAdd={async p => {
             const c = await savePeople([...people, p])
             if (c) { setAdding(false); setPicked(v => [...v, p.name]) }
           }} />}
@@ -158,22 +156,54 @@ function AddPerson({ onAdd, onCancel }: { onAdd: (p: SlackPerson) => void; onCan
   )
 }
 
-function PeopleEditor({ people, onSave }: { people: SlackPerson[]; onSave: (l: SlackPerson[]) => void }) {
-  const [list, setList] = useState<SlackPerson[]>(people.map(p => ({ name: p.name, handle: p.handle || '', github: p.github || '' })))
-  const set = (i: number, k: keyof SlackPerson, v: string) => setList(l => l.map((x, j) => j === i ? { ...x, [k]: v } : x))
+/** The list of people to @mention, for Settings → Slack: edit, remove, add one or paste several. */
+export function PeopleEditor({ people, onSave }: { people: SlackPerson[]; onSave: (l: SlackPerson[]) => Promise<unknown> }) {
+  const blank = (): SlackPerson => ({ name: '', handle: '', github: '' })
+  const [list, setList] = useState<SlackPerson[]>(() => [...people.map(p => ({ name: p.name, handle: p.handle || '', github: p.github || '' })), blank()])
+  const [paste, setPaste] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const set = (i: number, k: keyof SlackPerson, v: string) => setList(l => {
+    const n = l.map((x, j) => j === i ? { ...x, [k]: v } : x)
+    return n[n.length - 1].name.trim() ? [...n, blank()] : n // always one empty row to type into
+  })
+  const clean = list.filter(p => p.name.trim())
+  const changed = JSON.stringify(clean.map(p => [p.name.trim(), (p.handle || '').trim(), (p.github || '').trim()])) !== JSON.stringify(people.map(p => [p.name, p.handle || '', p.github || '']))
+  const addPasted = () => {
+    // one per line: Name, Slack handle, GitHub login (commas or tabs; the last two optional)
+    const rows = (paste || '').split('\n').map(l => l.split(/\t|,/).map(x => x.trim())).filter(c => c[0])
+    const have = new Set(clean.map(p => p.name.toLowerCase()))
+    const more = rows.filter(c => !have.has(c[0].replace(/^@/, '').toLowerCase())).map(c => ({ name: c[0].replace(/^@/, ''), handle: (c[1] || '').replace(/^@/, ''), github: (c[2] || '').replace(/^@/, '') }))
+    setList([...clean, ...more, blank()]); setPaste(null)
+  }
+  const save = async () => { setBusy(true); try { await onSave(clean) } finally { setBusy(false) } }
   return (
     <div className="slack-people">
       <div className="slack-people-h muted small"><span>Name as in Slack</span><span>Slack handle</span><span>GitHub login</span><span /></div>
-      {list.map((p, i) => (
-        <div key={i} className="slack-person">
-          <input value={p.name} onChange={e => set(i, 'name', e.target.value)} aria-label="Name as in Slack" />
-          <input value={p.handle} onChange={e => set(i, 'handle', e.target.value)} placeholder="optional" aria-label="Slack handle" />
-          <input value={p.github} onChange={e => set(i, 'github', e.target.value)} placeholder="optional" aria-label="GitHub login" />
-          <button type="button" className="btn ghost icon-only sm" onClick={() => setList(l => l.filter((_, j) => j !== i))} title="Remove" aria-label={`Remove ${p.name}`}><Icon name="trash" size={14} /></button>
+      {list.map((p, i) => {
+        const last = i === list.length - 1 && !p.name.trim()
+        return (
+          <div key={i} className={`slack-person ${last ? 'new' : ''}`}>
+            <input value={p.name} onChange={e => set(i, 'name', e.target.value)} placeholder={last ? (clean.length ? 'Add someone…' : 'e.g. Jasenko Rakovic') : ''} aria-label="Name as in Slack" />
+            <input value={p.handle} onChange={e => set(i, 'handle', e.target.value)} placeholder="optional" aria-label="Slack handle" />
+            <input value={p.github} onChange={e => set(i, 'github', e.target.value)} placeholder="optional" aria-label="GitHub login" />
+            {last ? <span /> : <button type="button" className="btn ghost icon-only sm" onClick={() => setList(l => l.filter((_, j) => j !== i))} title="Remove" aria-label={`Remove ${p.name}`}><Icon name="trash" size={14} /></button>}
+          </div>
+        )
+      })}
+      {paste !== null && (
+        <div className="slack-paste">
+          <textarea value={paste} onChange={e => setPaste(e.target.value)} rows={5} autoFocus placeholder={'One per line: name, Slack handle, GitHub login\nJasenko Rakovic\nOgnjen Mišić, ognjen, ogmzh'} aria-label="Several people, one per line" />
+          <div className="row">
+            <button type="button" className="btn sm" onClick={addPasted} disabled={!paste.trim()}>Add them to the list</button>
+            <button type="button" className="btn sm ghost" onClick={() => setPaste(null)}>Cancel</button>
+          </div>
         </div>
-      ))}
-      <p className="muted small">With a GitHub login, they are picked by themselves when GitHub waits on their review.</p>
-      <div className="row"><button type="button" className="btn sm primary" onClick={() => onSave(list)}>Save</button></div>
+      )}
+      <div className="row">
+        <button type="button" className="btn primary sm" onClick={save} disabled={busy || !changed}>{busy ? <Spinner size={12} /> : null}Save</button>
+        {paste === null && <button type="button" className="btn sm" onClick={() => setPaste('')}><Icon name="list" size={14} />Paste several</button>}
+        {changed && <span className="muted small">Not saved yet</span>}
+      </div>
     </div>
   )
 }

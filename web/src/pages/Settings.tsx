@@ -10,12 +10,14 @@ import { Icon } from '../components/icons'
 import { Select } from '../components/Select'
 import { ShortcutsSheet } from '../components/ShortcutsSheet'
 import { PocketModelSelect } from '../components/PocketModelSelect'
+import { PeopleEditor, type SlackPerson } from '../components/SlackCopy'
 
-type TabId = 'github' | 'walk' | 'notify' | 'apps' | 'ai' | 'profile' | 'people' | 'tokens' | 'data' | 'about'
+type TabId = 'github' | 'walk' | 'slack' | 'notify' | 'apps' | 'ai' | 'profile' | 'people' | 'tokens' | 'data' | 'about'
 
 const TABS: { id: TabId; label: string; icon: string; sub: string }[] = [
   { id: 'github', label: 'GitHub', icon: 'github', sub: 'Your GitHub token, and which pull requests come onto your list by themselves.' },
   { id: 'walk', label: 'Walkthroughs', icon: 'steps', sub: 'When walkthroughs are made, in which language, and hints for the order.' },
+  { id: 'slack', label: 'Slack', icon: 'share', sub: 'The people you @mention in a Slack message, and how Pocket AI writes it. Copied to paste in Slack; nothing is sent from here.' },
   { id: 'notify', label: 'Notifications', icon: 'bell', sub: 'A push when someone asks for your review, or when a walkthrough is ready.' },
   { id: 'apps', label: 'Connected apps', icon: 'layers', sub: 'Pocket AI: hand your review comments to a coding agent, and see the order an agent edited the files in.' },
   { id: 'ai', label: 'AI', icon: 'sparkles', sub: 'Who writes the walkthroughs and answers your questions: Pocket AI through Core, or your own OpenAI key.' },
@@ -64,6 +66,7 @@ export default function Settings() {
             <div className="set-title"><h2>{current.label}</h2><p>{current.sub}</p></div>
             {tab === 'github' && <GitHubTab />}
             {tab === 'walk' && <WalkTab />}
+            {tab === 'slack' && <SlackTab />}
             {tab === 'notify' && <Notifications />}
             {tab === 'apps' && <Integrations />}
             {tab === 'ai' && <AITab />}
@@ -177,6 +180,34 @@ function WalkTab() {
         {isAdmin && <SettingRow title="App title" help="Shown in the sidebar for everyone on this box."><input value={f.title} onChange={e => setF({ ...f, title: e.target.value })} /></SettingRow>}
       </Section>
       <div className="row"><button type="button" className="btn primary" onClick={() => save()} disabled={busy}>Save changes</button></div>
+    </div>
+  )
+}
+
+function SlackTab() {
+  const { toast } = useToast()
+  const [conf, setConf] = useState<{ people: SlackPerson[]; prompt: string; default_prompt: string } | null>(null)
+  const [how, setHow] = useState('')
+  const [v, setV] = useState(0)
+  useEffect(() => { api.get<{ people: SlackPerson[]; prompt: string; default_prompt: string }>(`${V1}/slack`).then(c => { setConf(c); setHow(c.prompt || c.default_prompt) }).catch(e => toast(String(e), 'err'))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const put = async (body: object, msg: string) => {
+    try { const c = await api.put<typeof conf>(`${V1}/slack`, body); setConf(c); setV(n => n + 1); toast(msg, 'ok'); return c } catch (e) { toast(e instanceof Error ? e.message : String(e), 'err'); return null }
+  }
+  if (!conf) return <Loading />
+  return (
+    <div className="stack loose">
+      <Section title="People to mention" icon="users" sub={<>Add the people you work with once, then pick them in <b>Message for Slack</b> (the share button on a pull request). Use their name as Slack shows it. Give a <b>Slack handle</b> when @Name does not turn into a mention, and a <b>GitHub login</b> to have them picked by themselves when GitHub waits on their review.</>}>
+        <PeopleEditor key={v} people={conf.people} onSave={l => put({ people: l }, `Saved: ${l.length} ${l.length === 1 ? 'person' : 'people'}`)} />
+      </Section>
+      <Section title="How Pocket AI writes it" icon="sparkles" sub="The line about the pull request, before the link. Used for every pull request.">
+        <textarea rows={3} value={how} onChange={e => setHow(e.target.value)} maxLength={2000} />
+        <div className="row">
+          <button type="button" className="btn primary sm" onClick={() => put({ prompt: how }, 'Saved')} disabled={how.trim() === (conf.prompt || conf.default_prompt)}>Save</button>
+          {conf.prompt && <button type="button" className="btn sm" onClick={async () => { const c = await put({ prompt: '' }, 'Back to the default'); if (c) setHow(c.default_prompt) }}>Back to the default</button>}
+        </div>
+      </Section>
     </div>
   )
 }
