@@ -142,19 +142,29 @@ func (s *Server) handleImportJSON(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		sent, _ := s.store.Reviews(ctx, uid, p.ID, "")
-		ids := map[int64]bool{}
+		// a review sent to GitHub is known by its GitHub id; one without
+		// (never sent) by what it says, so a second run adds nothing
+		key := func(x store.Review) string {
+			if x.GHID != 0 {
+				return fmt.Sprint("gh:", x.GHID)
+			}
+			return fmt.Sprint(x.Event, "\x1f", x.Body, "\x1f", x.CommitSHA, "\x1f", x.Day)
+		}
+		ids := map[string]bool{}
 		for _, x := range sent {
-			ids[x.GHID] = true
+			ids[key(x)] = true
 		}
 		for _, x := range ep.Reviews {
-			if x.GHID != 0 && ids[x.GHID] {
+			if ids[key(x)] {
 				continue
 			}
+			ids[key(x)] = true
 			x.ID, x.UserID, x.PullID = 0, uid, p.ID
 			if err := s.store.SaveReview(ctx, &x, nil); err == nil {
 				res["reviews"]++
 			}
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "imported": res})
+	// the counts at the top level too, for Pocket Move
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "imported": res, "pulls": res["pulls"], "comments": res["comments"], "reviews": res["reviews"], "viewed": res["viewed"]})
 }

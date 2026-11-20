@@ -15,6 +15,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/abjelosevic88/pocket-homelab-pr-review/internal/config"
 	"github.com/abjelosevic88/pocket-homelab-pr-review/internal/pocket"
 	"github.com/abjelosevic88/pocket-homelab-pr-review/internal/store"
 	"github.com/abjelosevic88/pocket-homelab-pr-review/internal/walk"
@@ -103,10 +104,13 @@ type tester struct {
 	tok map[string]string // email → API token
 }
 
-func newTester(t *testing.T) (*tester, *fakeGitHub) {
+func newTester(t *testing.T, opts ...func(*config.Config)) (*tester, *fakeGitHub) {
 	gh := newFakeGitHub(t)
 	dir := t.TempDir()
 	cfg := testConfig(dir)
+	for _, o := range opts {
+		o(cfg)
+	}
 	st := openTestStore(t, cfg)
 	s := New(cfg, st, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 	s.ghBase = gh.URL

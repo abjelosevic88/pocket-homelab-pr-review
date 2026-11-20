@@ -43,7 +43,7 @@ Everything under `/api/v1`, JSON in and out. Authenticate with a session cookie,
 
 ## Settings, people, data
 
-`GET/PUT /settings`, `POST /integrations/test` (`{"which":"github\|ai\|openai\|notify"}`), `GET /ai/status`, `GET /ai/models`, `/users`, `/tokens`, `GET /backup` (admin), `GET /export.json`, `GET /export.csv`, `POST /import`.
+`GET/PUT /settings`, `POST /integrations/test` (`{"which":"github\|ai\|openai\|notify"}`), `GET /ai/status`, `GET /ai/models`, `/users`, `/tokens`, `GET /backup` (admin), `GET /export.json`, `GET /export.csv`, `POST /import` (importing the same file twice adds nothing), `GET /pocket/portable` (Pocket Move can copy your pull requests and reviews out and bring them in: `move:export` / `move:import` links).
 
 ## Pocket Core links
 
