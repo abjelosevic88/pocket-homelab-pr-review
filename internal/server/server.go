@@ -225,10 +225,12 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		Description: "Review GitHub pull requests as a story, not an alphabetical file list: a walkthrough puts the changes in the order to read them — migration, data access, logic, routes, configuration, screens — with one sentence per file, shows how the change was built commit by commit (or edit by edit by a coding agent), remembers what you already looked at, and sends your review and comments back to GitHub or to a coding agent.",
 		Icon:        "/favicon.svg", Version: Version,
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "PR_REVIEW",
-		Publishes: eventTopics,
-		Offers:    linkOffers,
-		Portable:  portable,
-		Uses:      append(linkUses(), core.InferenceUse()),
+		Category:     "Work",
+		Publishes:    eventTopics,
+		Offers:       linkOffers,
+		Portable:     portable,
+		Capabilities: capabilities,
+		Uses:         append(linkUses(), core.InferenceUse()),
 	}
 	if s.cfg.BaseURL != "" {
 		m.OIDC = &core.OIDCRequest{RedirectURIs: []string{s.oidcCallbackURL()}}

@@ -33,6 +33,18 @@ var portable = &core.Portable{
 	},
 }
 
+// capabilities are what Pocket Search, Pocket Day and Pocket Hub may ask PR
+// Review (docs/capabilities.md in pocket-homelab-core); Register adds the
+// pocket:* offers. Nothing here asks GitHub: they read what the app keeps
+// from its own syncs and board refreshes (capabilities.go).
+var capabilities = core.Capabilities{
+	Search: &core.Searchable{What: "Your pull requests by title, repository, number or branch, and walkthroughs by what they say",
+		Kinds: []string{"pull request", "walkthrough"}, Bangs: []string{"pr", "prs"}},
+	Day: &core.DayFeed{Label: "Pull requests", One: "pull request", Many: "pull requests",
+		What: "Your pull requests merged that day, the reviews you sent and the walkthroughs made"},
+	Widget: &core.Widget{Title: "Your PRs", What: "Your open pull requests that need you (CI failing, changes asked, conflicts) and the ones ready to merge"},
+}
+
 type linkRoute struct {
 	methods string
 	path    *regexp.Regexp
@@ -56,7 +68,7 @@ var errLinkScope = errors.New("outside the link's scope")
 
 // linkAllows reports whether a link token with these scopes may make this request.
 func linkAllows(scopes []string, r *http.Request) bool {
-	if portable.LinkAllows(scopes, r) {
+	if portable.LinkAllows(scopes, r) || capabilities.LinkAllows(scopes, r) {
 		return true
 	}
 	for _, lr := range linkRoutes {

@@ -6,6 +6,7 @@ package server
 // itself carries every diff and is too large for a tool call.
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"regexp"
@@ -47,24 +48,52 @@ var numberOnly = regexp.MustCompile(`^#?(\d+)$`)
 // or words of the title or repository — open, closed and archived alike.
 func (s *Server) handleFindPulls(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	uid := actorID(ctx)
-	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	found, err := s.findPulls(ctx, actorID(ctx), strings.TrimSpace(r.URL.Query().Get("q")), 50)
+	if err != nil {
+		s.fail(w, err, "pull requests")
+		return
+	}
+	out := []briefPull{}
+	for _, p := range found {
+		out = append(out, toBrief(p))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"pulls": out})
+}
+
+// pullHay is what words of a search are looked for in: the repository and
+// number, the title, the author and the branch.
+func pullHay(p *store.Pull) string {
+	return strings.ToLower(p.Ref() + " " + p.Title + " " + p.Author + " " + p.HeadRef)
+}
+
+// hasWords reports whether every word is somewhere in hay.
+func hasWords(hay string, words []string) bool {
+	for _, w := range words {
+		if !strings.Contains(hay, w) {
+			return false
+		}
+	}
+	return true
+}
+
+// findPulls finds a person's pull requests by address, owner/repo#12, #12 or
+// 12, or words of the title, repository, author or branch (at most max, the
+// latest activity first); an empty q finds them all.
+func (s *Server) findPulls(ctx context.Context, uid int64, q string, max int) ([]*store.Pull, error) {
 	if repo, n, ok := github.ParseRef(q); ok {
 		if p, err := s.store.GetPullByRef(ctx, uid, repo, n); err == nil {
-			writeJSON(w, http.StatusOK, map[string]any{"pulls": []briefPull{toBrief(p)}})
-			return
+			return []*store.Pull{p}, nil
 		}
 	}
 	all, err := s.store.ListPulls(ctx, uid, store.PullFilter{State: "all", Limit: 1000})
 	if err != nil {
-		s.fail(w, err, "pull requests")
-		return
+		return nil, err
 	}
 	if archived, err := s.store.ListPulls(ctx, uid, store.PullFilter{State: "all", Archived: true, Limit: 1000}); err == nil {
 		all = append(all, archived...)
 	}
 	seen := map[int64]bool{}
-	out := []briefPull{}
+	out := []*store.Pull{}
 	num := 0
 	if m := numberOnly.FindStringSubmatch(q); m != nil {
 		num, _ = strconv.Atoi(m[1])
@@ -74,25 +103,21 @@ func (s *Server) handleFindPulls(w http.ResponseWriter, r *http.Request) {
 		if seen[p.ID] {
 			continue
 		}
-		hay := strings.ToLower(p.Ref() + " " + p.Title + " " + p.Author + " " + p.HeadRef)
 		hit := q == ""
 		if num > 0 {
 			hit = p.Number == num
 		} else if len(words) > 0 {
-			hit = true
-			for _, w := range words {
-				hit = hit && strings.Contains(hay, w)
-			}
+			hit = hasWords(pullHay(p), words)
 		}
 		if hit {
 			seen[p.ID] = true
-			out = append(out, toBrief(p))
+			out = append(out, p)
 		}
-		if len(out) >= 50 {
+		if len(out) >= max {
 			break
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"pulls": out})
+	return out, nil
 }
 
 // readyWalk is the pull request with its newest finished walkthrough.

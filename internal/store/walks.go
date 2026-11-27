@@ -264,3 +264,55 @@ func (s *Store) ViewedCounts(ctx context.Context, uid int64) (map[int64]map[stri
 	}
 	return out, rows.Err()
 }
+
+// WalkHead is a pull request's newest finished walkthrough, by its headline.
+type WalkHead struct {
+	ID         int64
+	PullID     int64
+	Title      string // the story's title
+	TLDR       string
+	FinishedAt string
+}
+
+// WalkHeads lists each pull request's newest finished walkthrough with its
+// title and one-line summary (what Pocket Search looks through), without
+// reading the rest of the story.
+func (s *Store) WalkHeads(ctx context.Context, uid int64) ([]WalkHead, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT w.id, w.pull_id, COALESCE(json_extract(w.doc, '$.title'), ''), COALESCE(json_extract(w.doc, '$.tldr'), ''), w.finished_at
+		FROM walkthroughs w WHERE w.user_id = ? AND w.status = 'ready' AND json_valid(w.doc)
+		AND w.id = (SELECT MAX(id) FROM walkthroughs x WHERE x.user_id = w.user_id AND x.pull_id = w.pull_id AND x.status = 'ready')
+		ORDER BY w.id DESC`, uid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []WalkHead{}
+	for rows.Next() {
+		var h WalkHead
+		if err := rows.Scan(&h.ID, &h.PullID, &h.Title, &h.TLDR, &h.FinishedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}
+
+// WalksFinished lists a person's walkthroughs that were ready between from
+// (inclusive) and to (exclusive), RFC 3339 in UTC, oldest first.
+func (s *Store) WalksFinished(ctx context.Context, uid int64, from, to string) ([]*Walkthrough, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT id, user_id, pull_id, head_sha, base_sha, status, progress, error, ai, '{}', '[]', created_at, finished_at
+		FROM walkthroughs WHERE user_id = ? AND status = 'ready' AND finished_at >= ? AND finished_at < ? ORDER BY finished_at, id LIMIT 200`, uid, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*Walkthrough{}
+	for rows.Next() {
+		w, err := scanWalk(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, w)
+	}
+	return out, rows.Err()
+}

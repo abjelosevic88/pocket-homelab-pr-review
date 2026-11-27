@@ -160,3 +160,24 @@ func affected(res sql.Result, err error) error {
 	}
 	return nil
 }
+
+// PullsChangedBetween lists a person's pull requests in one state (archived
+// ones too) whose last change on GitHub, as the sync last read it, falls
+// between from (inclusive) and to (exclusive), RFC 3339 in UTC.
+func (s *Store) PullsChangedBetween(ctx context.Context, uid int64, state, from, to string) ([]*Pull, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT `+pullCols+` FROM pulls WHERE user_id = ? AND state = ? AND gh_updated_at >= ? AND gh_updated_at < ?
+		ORDER BY gh_updated_at, id LIMIT 200`, uid, state, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*Pull{}
+	for rows.Next() {
+		p, err := scanPull(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
